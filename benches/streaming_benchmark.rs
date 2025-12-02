@@ -5,8 +5,9 @@ use tempfile::NamedTempFile;
 
 fn benchmark_write(c: &mut Criterion) {
     let mut group = c.benchmark_group("write");
+    group.sample_size(10); // Reduce samples for large benchmarks
     
-    for size in [100, 1000, 10000, 100000, 1000000].iter() {
+    for size in [100, 1000, 5000, 10000].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             b.iter(|| {
                 let temp = NamedTempFile::new().unwrap();
@@ -32,9 +33,10 @@ fn benchmark_write(c: &mut Criterion) {
 
 fn benchmark_read(c: &mut Criterion) {
     let mut group = c.benchmark_group("read");
+    group.sample_size(10);
     
-    for size in [1000, 10000, 100000].iter() {
-        // Prepare test file
+    for size in [1000, 5000, 10000].iter() {
+        // Prepare test file once
         let temp = NamedTempFile::new().unwrap();
         let path = temp.path().to_string_lossy().to_string();
         
@@ -87,8 +89,9 @@ fn benchmark_typed_write(c: &mut Criterion) {
 
 fn benchmark_fast_write(c: &mut Criterion) {
     let mut group = c.benchmark_group("fast_write");
+    group.sample_size(10);
     
-    for size in [1000, 10000, 100000].iter() {
+    for size in [1000, 5000, 10000].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             b.iter(|| {
                 let temp = NamedTempFile::new().unwrap();

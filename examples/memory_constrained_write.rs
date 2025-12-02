@@ -26,10 +26,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     test_balanced("memory_test_balanced.xlsx", NUM_ROWS)?;
     println!("   Time: {:?}\n", start.elapsed());
     
+    // Test 4: Conservative flush (every 5000 rows) - High performance
+    println!("4. Conservative flush (every 5000 rows) - High performance:");
+    let start = Instant::now();
+    test_conservative("memory_test_conservative.xlsx", NUM_ROWS)?;
+    println!("   Time: {:?}\n", start.elapsed());
+    
     println!("=== Recommendations ===");
     println!("- Small pods (< 512MB): Use flush_interval = 100");
     println!("- Medium pods (512MB - 1GB): Use flush_interval = 500");
-    println!("- Large pods (> 1GB): Use flush_interval = 1000 (default)");
+    println!("- Large pods (1-2GB): Use flush_interval = 1000 (default)");
+    println!("- Extra large pods (> 2GB): Use flush_interval = 5000 (maximum performance)");
     
     Ok(())
 }
@@ -63,6 +70,19 @@ fn test_balanced(filename: &str, num_rows: usize) -> Result<(), Box<dyn std::err
     // Cấu hình cân bằng
     workbook.set_flush_interval(500); // Flush every 500 rows
     workbook.set_max_buffer_size(512 * 1024); // 512KB max buffer
+    
+    workbook.add_worksheet("Sheet1")?;
+    write_data(&mut workbook, num_rows)?;
+    workbook.close()?;
+    Ok(())
+}
+
+fn test_conservative(filename: &str, num_rows: usize) -> Result<(), Box<dyn std::error::Error>> {
+    let mut workbook = FastWorkbook::new(filename)?;
+    
+    // Configuration for maximum performance
+    workbook.set_flush_interval(5000); // Flush every 5000 rows
+    workbook.set_max_buffer_size(2 * 1024 * 1024); // 2MB max buffer
     
     workbook.add_worksheet("Sheet1")?;
     write_data(&mut workbook, num_rows)?;
