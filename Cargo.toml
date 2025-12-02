@@ -1,6 +1,6 @@
 [package]
 name = "excelstream"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Ton That Vu <ttvuhm@gmail.com>"]
 description = "High-performance streaming Excel library - Read/write large XLSX files with memory-efficient streaming"
@@ -67,11 +67,6 @@ path = "examples/streaming_read.rs"
 [[example]]
 name = "streaming_write"
 path = "examples/streaming_write.rs"
-
-[[example]]
-name = "postgres_to_excel"
-path = "examples/postgres_to_excel.rs"
-required-features = ["postgres"]
 
 [[example]]
 name = "postgres_to_excel_advanced"

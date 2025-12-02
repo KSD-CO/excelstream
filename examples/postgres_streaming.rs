@@ -10,8 +10,8 @@
 //! - Progress tracking with ETA
 //! - Uses typed values for better performance (+40% faster)
 
-use excelstream::writer::ExcelWriter;
 use excelstream::types::CellValue;
+use excelstream::writer::ExcelWriter;
 use postgres::{Client, NoTls};
 use std::time::{Duration, Instant};
 
@@ -53,13 +53,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create Excel workbook
     println!("Creating Excel workbook...");
     let mut writer = ExcelWriter::new(output_file)?;
-    
+
     // Configure for optimal memory usage
-    writer.set_flush_interval(1000);  // Flush every 1000 rows
-    writer.set_max_buffer_size(1024 * 1024);  // 1MB buffer
+    writer.set_flush_interval(1000); // Flush every 1000 rows
+    writer.set_max_buffer_size(1024 * 1024); // 1MB buffer
 
     // Write header
-    writer.write_header(&["ID", "Name", "Email", "Age", "City", "Created At"])?;
+    writer.write_header(["ID", "Name", "Email", "Age", "City", "Created At"])?;
     println!("Header written.\n");
 
     // Statistics

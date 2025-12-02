@@ -10,8 +10,8 @@
 //! - Typed values for +40% better performance
 
 use deadpool_postgres::{Config, Pool, Runtime};
-use excelstream::writer::ExcelWriter;
 use excelstream::types::CellValue;
+use excelstream::writer::ExcelWriter;
 use std::time::Instant;
 use tokio_postgres::NoTls;
 
@@ -73,7 +73,7 @@ async fn export_table(
     pool: &Pool,
     query: &str,
     output_file: &str,
-    _sheet_name: &str,  // Not used in v0.2.0 (ExcelWriter creates default "Sheet1")
+    _sheet_name: &str, // Not used in v0.2.0 (ExcelWriter creates default "Sheet1")
 ) -> Result<(), Box<dyn std::error::Error>> {
     let start = Instant::now();
 
@@ -88,7 +88,7 @@ async fn export_table(
 
     // Create writer
     let mut writer = ExcelWriter::new(output_file)?;
-    
+
     // Configure for optimal performance
     writer.set_flush_interval(1000);
     writer.set_max_buffer_size(1024 * 1024);
@@ -142,13 +142,13 @@ async fn export_multiple_tables(pool: &Pool) -> Result<(), Box<dyn std::error::E
     let output_file = "multi_table_export.xlsx";
 
     let mut writer = ExcelWriter::new(output_file)?;
-    
+
     // Configure for optimal performance
     writer.set_flush_interval(1000);
     writer.set_max_buffer_size(1024 * 1024);
 
     // Define queries for different sheets
-    let queries = vec![
+    let queries = [
         (
             "Users Summary",
             "SELECT city, COUNT(*) as user_count, AVG(age) as avg_age FROM users GROUP BY city ORDER BY user_count DESC LIMIT 100"
