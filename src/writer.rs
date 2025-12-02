@@ -8,6 +8,9 @@ use std::path::Path;
 /// Excel file writer with streaming capabilities
 ///
 /// Writes Excel files row by row, minimizing memory usage for large datasets.
+/// 
+/// Note: This is a wrapper around rust_xlsxwriter. For better performance with
+/// large datasets (100K+ rows), consider using `FastWorkbook` instead.
 pub struct ExcelWriter {
     workbook: Workbook,
     current_sheet: Option<Worksheet>,
@@ -15,9 +18,6 @@ pub struct ExcelWriter {
     current_row: u32,
     output_path: String,
     sheet_counter: usize,
-    // Pre-allocated buffers to reduce allocations
-    string_buffer: String,
-    row_buffer: Vec<String>,
 }
 
 impl ExcelWriter {
@@ -44,8 +44,6 @@ impl ExcelWriter {
             current_row: 0,
             output_path,
             sheet_counter: 1,
-            string_buffer: String::with_capacity(256),
-            row_buffer: Vec::with_capacity(20),
         })
     }
 
@@ -130,52 +128,6 @@ impl ExcelWriter {
         Ok(())
     }
 
-    /// Write a row with pre-allocated buffer (optimized for performance)
-    ///
-    /// This method reuses internal buffers to reduce allocations.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use excelstream::writer::ExcelWriter;
-    ///
-    /// let mut writer = ExcelWriter::new("output.xlsx").unwrap();
-    /// 
-    /// for i in 0..10000 {
-    ///     writer.write_row_fast(&[
-    ///         &i.to_string(),
-    ///         &format!("Name_{}", i),
-    ///         &format!("Email_{}@example.com", i),
-    ///     ]).unwrap();
-    /// }
-    /// writer.save().unwrap();
-    /// ```
-    pub fn write_row_fast<I, S>(&mut self, data: I) -> Result<()>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        // Clear buffer without deallocating
-        self.row_buffer.clear();
-        
-        // Collect into pre-allocated buffer
-        for value in data {
-            self.row_buffer.push(value.as_ref().to_string());
-        }
-        
-        // Write from buffer
-        let sheet = self.current_sheet.as_mut().unwrap();
-        for (col, value) in self.row_buffer.iter().enumerate() {
-            sheet.write_string(
-                self.current_row,
-                col as u16,
-                value,
-            )?;
-        }
-        self.current_row += 1;
-        Ok(())
-    }
-
     /// Write a row with typed cell values
     ///
     /// # Examples
@@ -195,19 +147,6 @@ impl ExcelWriter {
     pub fn write_row_typed(&mut self, cells: &[CellValue]) -> Result<()> {
         for (col, cell) in cells.iter().enumerate() {
             self.write_cell(self.current_row, col as u16, cell)?;
-        }
-        self.current_row += 1;
-        Ok(())
-    }
-
-    /// Write a row with typed values using buffer (optimized)
-    ///
-    /// More efficient for large datasets with repeated writes.
-    pub fn write_row_typed_fast(&mut self, cells: &[CellValue]) -> Result<()> {
-        // Direct write without intermediate allocations
-        let row = self.current_row;
-        for (col, cell) in cells.iter().enumerate() {
-            self.write_cell(row, col as u16, cell)?;
         }
         self.current_row += 1;
         Ok(())
@@ -302,10 +241,6 @@ impl ExcelWriter {
         self.current_sheet_name = name.to_string();
         self.current_row = 0;
         self.sheet_counter += 1;
-        
-        // Reset buffers for new sheet
-        self.row_buffer.clear();
-        self.string_buffer.clear();
         
         Ok(())
     }

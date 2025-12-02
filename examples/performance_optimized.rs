@@ -28,15 +28,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Time: {:?}", duration);
     println!("  Throughput: {:.0} rows/sec\n", 100_000.0 / duration.as_secs_f64());
 
-    // Test 2: Optimized write_row_fast
-    println!("Test 2: Optimized write_row_fast (100,000 rows)");
+    // Test 2: Standard write_row (write_row_fast removed - was actually slower)
+    println!("Test 2: Standard write_row (100,000 rows)");
     let start = Instant::now();
     {
         let mut writer = ExcelWriter::new("examples/perf_fast.xlsx")?;
         writer.write_header(&["ID", "Name", "Email", "Score"])?;
         
         for i in 0..100_000 {
-            writer.write_row_fast(&[
+            writer.write_row(&[
                 &i.to_string(),
                 &format!("User_{}", i),
                 &format!("user_{}@example.com", i),
