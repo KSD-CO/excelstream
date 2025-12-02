@@ -402,13 +402,18 @@ fn generate_mixed_row_strings(row_num: usize, num_cols: usize) -> Vec<String> {
 
     for col in 0..num_cols {
         let value = match col {
-            0 => format!("{}", row_num),                                      // ID
-            1 => format!("User_{}", row_num),                                 // Name
-            2 => format!("user{}@example.com", row_num),                      // Email
-            3 => format!("{}", 20 + (row_num % 50)),                          // Age (as string)
-            4 => format!("{:.2}", 30000.0 + (row_num as f64 * 123.45)),       // Salary (as string)
-            5 => if row_num.is_multiple_of(2) { "true" } else { "false" }.to_string(), // Active (as string)
-            6 => format!("{:.1}", 50.0 + (row_num % 50) as f64),              // Score (as string)
+            0 => format!("{}", row_num),                                // ID
+            1 => format!("User_{}", row_num),                           // Name
+            2 => format!("user{}@example.com", row_num),                // Email
+            3 => format!("{}", 20 + (row_num % 50)),                    // Age (as string)
+            4 => format!("{:.2}", 30000.0 + (row_num as f64 * 123.45)), // Salary (as string)
+            5 => if row_num.is_multiple_of(2) {
+                "true"
+            } else {
+                "false"
+            }
+            .to_string(), // Active (as string)
+            6 => format!("{:.1}", 50.0 + (row_num % 50) as f64),        // Score (as string)
             7 => match row_num % 5 {
                 0 => "Engineering",
                 1 => "Sales",
