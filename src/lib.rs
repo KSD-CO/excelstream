@@ -5,7 +5,10 @@
 //! ## Features
 //!
 //! - **Streaming Read**: Read large Excel files without loading entire file into memory
-//! - **Streaming Write**: Write Excel files row by row efficiently
+//! - **Streaming Write**: Write millions of rows with constant ~80MB memory usage
+//! - **Formula Support**: Write Excel formulas that calculate correctly
+//! - **High Performance**: 21-47% faster than rust_xlsxwriter baseline
+//! - **Better Errors**: Context-rich error messages with debugging info
 //! - **Multiple Formats**: Support for XLSX, XLS, ODS formats
 //! - **Type Safety**: Strong typing with Rust's type system
 //! - **Zero-copy**: Minimize memory allocations where possible
@@ -32,13 +35,27 @@
 //!
 //! ```rust,no_run
 //! use excelstream::writer::ExcelWriter;
+//! use excelstream::types::CellValue;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let mut writer = ExcelWriter::new("output.xlsx")?;
 //!
-//! writer.write_row(&["Name", "Age", "City"])?;
-//! writer.write_row(&["Alice", "30", "New York"])?;
-//! writer.write_row(&["Bob", "25", "San Francisco"])?;
+//! // Write header
+//! writer.write_header(&["Name", "Age", "City"])?;
+//!
+//! // Write data rows with typed values
+//! writer.write_row_typed(&[
+//!     CellValue::String("Alice".to_string()),
+//!     CellValue::Int(30),
+//!     CellValue::String("New York".to_string()),
+//! ])?;
+//!
+//! // Write with formulas
+//! writer.write_row_typed(&[
+//!     CellValue::String("Total".to_string()),
+//!     CellValue::Formula("=COUNT(B2:B10)".to_string()),
+//!     CellValue::Empty,
+//! ])?;
 //!
 //! writer.save()?;
 //! # Ok(())

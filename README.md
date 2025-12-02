@@ -4,23 +4,29 @@
 
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/KSD-CO/excelstream/workflows/Rust/badge.svg)](https://github.com/KSD-CO/excelstream/actions)
 
-> **⚠️ BREAKING CHANGE in v0.2.0:**  
-> Removed `rust_xlsxwriter` dependency! ExcelWriter now uses custom FastWorkbook implementation for **streaming** with constant memory usage and **21-40% faster performance**.  
-> See [MIGRATION_v0.2.0.md](MIGRATION_v0.2.0.md) for migration guide.
+> **✨ What's New in v0.2.2:**
+> - ✅ **Formula Support** - Write Excel formulas like `=SUM(A1:A10)`
+> - ✅ **Better Error Messages** - Context-rich errors with sheet information
+> - ✅ **21-47% Faster** - Optimized performance vs rust_xlsxwriter
+> - ✅ **Comprehensive Tests** - 47 tests covering edge cases, unicode, special characters
+> - ✅ **CI/CD Pipeline** - Automated testing and publishing
 
 ## ✨ Features
 
-- 🚀 **Streaming Read** - Read large Excel files without loading entire content into memory
-- 💾 **Streaming Write** - Write millions of rows with constant ~80MB memory usage (NEW in v0.2.0!)
-- ⚡ **21-40% Faster** - ExcelWriter is now faster than rust_xlsxwriter (v0.2.0)
-- 🎯 **Typed Values** - Write with proper data types for better Excel compatibility
-- 🎯 **Memory Constrained** - Configurable flush intervals for memory-limited environments
-- 📊 **Multi-format Support** - XLSX, XLS, ODS for reading
-- 🔒 **Type-safe** - Leverage Rust's type system
-- ⚡ **Zero-copy** - Minimize memory allocations
+- 🚀 **Streaming Read** - Process large Excel files without loading entire file into memory
+- 💾 **Streaming Write** - Write millions of rows with constant ~80MB memory usage
+- ⚡ **High Performance** - 21-47% faster than rust_xlsxwriter baseline
+- 📐 **Formula Support** - Write Excel formulas (=SUM, =AVERAGE, =IF, etc.)
+- 🎯 **Typed Values** - Strong typing with Int, Float, Bool, DateTime, Formula
+- 🔧 **Memory Efficient** - Configurable flush intervals for memory-limited environments
+- ❌ **Better Errors** - Context-rich error messages with available sheets list
+- 📊 **Multi-format Support** - Read XLSX, XLS, ODS formats
+- 🔒 **Type-safe** - Leverage Rust's type system for safety
 - 📝 **Multi-sheet** - Support multiple sheets in one workbook
-- 🗄️ **PostgreSQL** - Database export examples included
+- 🗄️ **Database Export** - PostgreSQL integration examples
+- ✅ **Production Ready** - 47 tests, CI/CD, zero unsafe code
 
 ## 📦 Installation
 
@@ -87,11 +93,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-**v0.2.0 Changes:**
-- ✅ Streaming with constant ~80MB memory (was ~300MB in v0.1.x)
-- ✅ 21-40% faster than rust_xlsxwriter
-- ❌ Bold header formatting removed (will be added back in v0.2.1)
-- ❌ `set_column_width()` is now a no-op (will be added back in v0.2.1)
+**Key Benefits:**
+- ✅ Constant ~80MB memory usage regardless of dataset size
+- ✅ 21-47% faster than rust_xlsxwriter baseline
+- ✅ Direct ZIP streaming - data written to disk immediately
+- ⚠️ Note: Bold formatting and column width not yet implemented in streaming mode
 
 ### Writing with Typed Values (Recommended)
 
@@ -103,9 +109,9 @@ use excelstream::types::CellValue;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut writer = ExcelWriter::new("typed_output.xlsx")?;
-    
+
     writer.write_header(&["Name", "Age", "Salary", "Active"])?;
-    
+
     // Typed values: numbers are numbers, formulas work in Excel
     writer.write_row_typed(&[
         CellValue::String("Alice".to_string()),
@@ -113,7 +119,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         CellValue::Float(75000.50),
         CellValue::Bool(true),
     ])?;
-    
+
     writer.save()?;
     Ok(())
 }
@@ -122,8 +128,56 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 **Benefits of `write_row_typed()`:**
 - ✅ Numbers are stored as numbers (not text)
 - ✅ Booleans display as TRUE/FALSE
+- ✅ Excel formulas work correctly
 - ✅ Better type safety
-- ✅ 40% faster than rust_xlsxwriter in v0.2.0
+- ✅ 40% faster than rust_xlsxwriter
+
+### Writing Excel Formulas
+
+```rust
+use excelstream::writer::ExcelWriter;
+use excelstream::types::CellValue;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut writer = ExcelWriter::new("formulas.xlsx")?;
+
+    // Header row
+    writer.write_header(&["Value 1", "Value 2", "Sum", "Average"])?;
+
+    // Data with formulas
+    writer.write_row_typed(&[
+        CellValue::Int(10),
+        CellValue::Int(20),
+        CellValue::Formula("=A2+B2".to_string()),      // Sum
+        CellValue::Formula("=AVERAGE(A2:B2)".to_string()), // Average
+    ])?;
+
+    writer.write_row_typed(&[
+        CellValue::Int(15),
+        CellValue::Int(25),
+        CellValue::Formula("=A3+B3".to_string()),
+        CellValue::Formula("=AVERAGE(A3:B3)".to_string()),
+    ])?;
+
+    // Total row with SUM formula
+    writer.write_row_typed(&[
+        CellValue::String("Total".to_string()),
+        CellValue::Empty,
+        CellValue::Formula("=SUM(C2:C3)".to_string()),
+        CellValue::Formula("=AVERAGE(D2:D3)".to_string()),
+    ])?;
+
+    writer.save()?;
+    Ok(())
+}
+```
+
+**Supported Formulas:**
+- ✅ Basic arithmetic: `=A1+B1`, `=A1*B1`, `=A1/B1`
+- ✅ SUM, AVERAGE, COUNT, MIN, MAX
+- ✅ Cell ranges: `=SUM(A1:A10)`
+- ✅ Complex formulas: `=IF(A1>100, "High", "Low")`
+- ✅ All standard Excel functions
 
 ### Direct FastWorkbook Usage (Maximum Performance)
 
@@ -286,16 +340,16 @@ cargo run --example postgres_to_excel_advanced --features postgres-async
 - `read_cell(sheet, row, col)` - Read specific cell
 - `dimensions(sheet_name)` - Get sheet dimensions (rows, cols)
 
-### ExcelWriter (v0.2.0 - Streaming)
+### ExcelWriter (Streaming)
 
 - `new(path)` - Create new writer
 - `write_row(data)` - Write row with strings
 - `write_row_typed(cells)` - Write row with typed values (recommended)
-- `write_header(headers)` - Write header row (no formatting in v0.2.0)
+- `write_header(headers)` - Write header row
 - `add_sheet(name)` - Add new sheet
-- `set_flush_interval(rows)` - Configure flush frequency (NEW in v0.2.0)
-- `set_max_buffer_size(bytes)` - Configure buffer size (NEW in v0.2.0)
-- `set_column_width(col, width)` - No-op in v0.2.0 (will be restored in v0.2.1)
+- `set_flush_interval(rows)` - Configure flush frequency (default: 1000)
+- `set_max_buffer_size(bytes)` - Configure buffer size (default: 1MB)
+- `set_column_width(col, width)` - Not yet implemented in streaming mode
 - `save()` - Save and finalize workbook
 
 ### FastWorkbook (Direct Access)
@@ -309,9 +363,9 @@ cargo run --example postgres_to_excel_advanced --features postgres-async
 
 ### Types
 
-- `CellValue` - Enum for cell values: Empty, String, Int, Float, Bool, DateTime, Error
-- `Row` - Struct representing a row with index and cells
-- `Cell` - Struct for a cell with position (row, col) and value
+- `CellValue` - Enum: Empty, String, Int, Float, Bool, DateTime, Error, Formula
+- `Row` - Row with index and cells vector
+- `Cell` - Cell with position (row, col) and value
 
 ## 🎯 Use Cases
 
@@ -371,50 +425,37 @@ writer.save()?;
 
 ## ⚡ Performance
 
-### v0.2.0 Performance (1M rows × 30 columns)
-
 Tested with **1 million rows × 30 columns** (mixed data types):
 
-| Writer Type | Speed (rows/s) | vs rust_xlsxwriter | Memory Usage |
-|-------------|----------------|-------------------|--------------|
-| rust_xlsxwriter direct | 30,525 | baseline (1.00x) | ~300MB (grows) |
-| **ExcelWriter.write_row()** | **36,870** | **+21% faster** | **~80MB constant** ✅ |
-| **ExcelWriter.write_row_typed()** | **42,877** | **+40% faster** | **~80MB constant** ✅ |
-| **FastWorkbook direct** | **44,753** | **+47% faster** | **~80MB constant** ✅ |
+| Writer Type | Speed (rows/s) | vs Baseline | Memory Usage |
+|-------------|----------------|-------------|--------------|
+| rust_xlsxwriter | 30,525 | baseline | ~300MB (grows) |
+| **ExcelWriter.write_row()** | **36,870** | **+21%** ⚡ | **~80MB constant** ✅ |
+| **ExcelWriter.write_row_typed()** | **42,877** | **+40%** ⚡ | **~80MB constant** ✅ |
+| **FastWorkbook** | **44,753** | **+47%** ⚡ | **~80MB constant** ✅ |
 
-**Key Improvements in v0.2.0:**
+**Key Advantages:**
 - ✅ **21-47% faster** than rust_xlsxwriter
-- ✅ **Constant ~80MB memory** (was ~300MB with rust_xlsxwriter)
-- ✅ **Streaming** - memory doesn't grow with dataset size
-- ✅ **No external dependencies** for writing
-
-### Memory Usage Comparison
-
-**v0.1.x (using rust_xlsxwriter):**
-- Memory grows with data: ~300MB for 1M rows
-- All data kept in memory until save()
-
-**v0.2.0 (using FastWorkbook):**
-- Constant memory: ~80MB regardless of rows
-- Data written directly to disk
-- Configurable flush intervals
+- ✅ **Constant memory** - doesn't grow with dataset size
+- ✅ **True streaming** - data written directly to disk
+- ✅ **No memory spikes** - predictable resource usage
 
 ### Recommendations
 
-| Use Case | Recommended Writer | Performance |
-|----------|-------------------|-------------|
-| General use | `ExcelWriter.write_row_typed()` | 42,877 rows/s, typed values |
-| Simple text | `ExcelWriter.write_row()` | 36,870 rows/s, easy to use |
-| Maximum speed | `FastWorkbook` direct | 44,753 rows/s, low-level API |
-| Need formatting | Use rust_xlsxwriter directly | 30,525 rows/s, full features |
+| Use Case | Recommended Writer | Why |
+|----------|-------------------|-----|
+| General use | `ExcelWriter.write_row_typed()` | Best balance of speed + features |
+| Simple exports | `ExcelWriter.write_row()` | Easy API, good performance |
+| Maximum speed | `FastWorkbook` | Fastest, lowest-level API |
+| Advanced formatting | rust_xlsxwriter | Full Excel features |
 
 ## 📖 Documentation
 
-- [Quick Start Guide](docs/QUICKSTART.md) - Get started in 5 minutes
-- [Fast Writer Guide](docs/FAST_WRITER.md) - High-performance writing
-- [Memory-Constrained Guide](docs/MEMORY_CONSTRAINED.md) - For Kubernetes pods
-- [Optimization Summary](docs/OPTIMIZATION_SUMMARY.md) - Performance details
-- [Contributing Guide](docs/CONTRIBUTING.md) - How to contribute
+- **README.md** (this file) - Complete guide with examples
+- [CONTRIBUTING.md](CONTRIBUTING.md) - How to contribute
+- [CHANGELOG.md](CHANGELOG.md) - Version history
+- Examples in `/examples` directory
+- Doc tests in source code
 
 ## 🛠️ Development
 
@@ -453,18 +494,31 @@ cargo bench
 
 ## 🚀 Production Ready
 
-- ✅ Tested with 1M+ row datasets
-- ✅ Streaming with constant memory usage
-- ✅ 21-47% faster than rust_xlsxwriter
-- ✅ Memory-safe with Rust's ownership
-- ✅ Works in Kubernetes pods with limited resources
-- ✅ Comprehensive error handling
-- ✅ Zero unsafe code
-- ✅ Validated Excel output (readable by Excel/LibreOffice)
+- ✅ **Battle-tested** - Handles 1M+ row datasets
+- ✅ **High performance** - 21-47% faster than alternatives
+- ✅ **Memory efficient** - Constant ~80MB usage, works in K8s pods
+- ✅ **Reliable** - 47 comprehensive tests covering edge cases
+- ✅ **Safe** - Zero unsafe code, full Rust memory safety
+- ✅ **Compatible** - Excel, LibreOffice, Google Sheets
+- ✅ **Unicode support** - Special characters, emojis, CJK
+- ✅ **CI/CD** - Automated testing on every commit
 
 ## 🤝 Contributing
 
-Contributions welcome! Please feel free to submit a Pull Request.
+Contributions welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+**Areas for Contribution:**
+- Cell formatting and styling (Phase 3)
+- Conditional formatting
+- Charts and images support
+- More examples and documentation
+- Performance optimizations
+
+All contributions must:
+- Pass `cargo fmt --check`
+- Pass `cargo clippy -- -D warnings`
+- Pass all tests `cargo test --all-features`
+- Include tests for new features
 
 ## 📄 License
 
@@ -474,9 +528,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 This library uses:
 - [calamine](https://github.com/tafia/calamine) - Excel reader
-- Custom FastWorkbook implementation - High-performance writer (v0.2.0+)
-
-**Previous versions (v0.1.x)** used [rust_xlsxwriter](https://github.com/jmcnamara/rust_xlsxwriter) - removed in v0.2.0 for better performance and streaming.
+- Custom FastWorkbook - High-performance streaming writer
 
 ## 📧 Contact
 
