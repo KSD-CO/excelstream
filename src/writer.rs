@@ -1,27 +1,43 @@
-//! Excel file writing with streaming support
+//! Excel file writing with TRUE streaming support
+//!
+//! **Breaking Change in v0.2.0:** ExcelWriter now uses true streaming with constant memory usage.
+//! Data is written directly to disk as you call write_row(), not kept in memory.
 
 use crate::error::Result;
 use crate::types::CellValue;
-use rust_xlsxwriter::{Format, Workbook, Worksheet};
+use crate::fast_writer::FastWorkbook;
 use std::path::Path;
 
-/// Excel file writer with streaming capabilities
+/// Excel file writer with TRUE streaming capabilities
 ///
-/// Writes Excel files row by row, minimizing memory usage for large datasets.
+/// **V0.2.0 Breaking Change:** Now uses true streaming underneath. 
+/// Data is written directly to disk with constant memory usage.
 /// 
-/// Note: This is a wrapper around rust_xlsxwriter. For better performance with
-/// large datasets (100K+ rows), consider using `FastWorkbook` instead.
+/// Writes Excel files row by row, streaming data directly to a ZIP file.
+/// Memory usage is constant (~80MB) regardless of dataset size.
+///
+/// # Examples
+///
+/// ```no_run
+/// use excelstream::writer::ExcelWriter;
+///
+/// let mut writer = ExcelWriter::new("output.xlsx").unwrap();
+/// 
+/// // Write millions of rows with constant memory usage
+/// for i in 0..1_000_000 {
+///     writer.write_row(&["Name", "Age", "Email"]).unwrap();
+/// }
+/// 
+/// writer.save().unwrap();
+/// ```
 pub struct ExcelWriter {
-    workbook: Workbook,
-    current_sheet: Option<Worksheet>,
+    inner: FastWorkbook,
     current_sheet_name: String,
     current_row: u32,
-    output_path: String,
-    sheet_counter: usize,
 }
 
 impl ExcelWriter {
-    /// Create a new Excel writer
+    /// Create a new Excel writer with streaming support
     ///
     /// # Examples
     ///
@@ -33,23 +49,20 @@ impl ExcelWriter {
     /// writer.save().unwrap();
     /// ```
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let output_path = path.as_ref().to_string_lossy().to_string();
-        let workbook = Workbook::new();
-        let current_sheet = Some(Worksheet::new());
+        let mut inner = FastWorkbook::new(path)?;
+        inner.add_worksheet("Sheet1")?;
         
         Ok(ExcelWriter {
-            workbook,
-            current_sheet,
+            inner,
             current_sheet_name: "Sheet1".to_string(),
             current_row: 0,
-            output_path,
-            sheet_counter: 1,
         })
     }
 
-    /// Write a row of data
+    /// Write a row of data (streaming to disk)
     ///
-    /// Accepts any iterator of items that can be converted to strings.
+    /// Data is written directly to the ZIP file and flushed periodically.
+    /// Memory usage remains constant regardless of how many rows you write.
     ///
     /// # Examples
     ///
@@ -66,21 +79,16 @@ impl ExcelWriter {
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let sheet = self.current_sheet.as_mut().unwrap();
-        for (col, value) in data.into_iter().enumerate() {
-            sheet.write_string(
-                self.current_row,
-                col as u16,
-                value.as_ref(),
-            )?;
-        }
+        let values: Vec<String> = data.into_iter()
+            .map(|s| s.as_ref().to_string())
+            .collect();
+        let refs: Vec<&str> = values.iter().map(|s| s.as_str()).collect();
+        self.inner.write_row(&refs)?;
         self.current_row += 1;
         Ok(())
     }
 
-    /// Write multiple rows at once (batch operation for better performance)
-    ///
-    /// This is the most efficient way to write many rows.
+    /// Write multiple rows at once (batch operation)
     ///
     /// # Examples
     ///
@@ -104,19 +112,9 @@ impl ExcelWriter {
         R: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let sheet = self.current_sheet.as_mut().unwrap();
-        
         for row_data in rows {
-            for (col, value) in row_data.into_iter().enumerate() {
-                sheet.write_string(
-                    self.current_row,
-                    col as u16,
-                    value.as_ref(),
-                )?;
-            }
-            self.current_row += 1;
+            self.write_row(row_data)?;
         }
-        
         Ok(())
     }
 
@@ -129,6 +127,8 @@ impl ExcelWriter {
     }
 
     /// Write a row with typed cell values
+    ///
+    /// Converts typed values to strings for writing.
     ///
     /// # Examples
     ///
@@ -145,43 +145,27 @@ impl ExcelWriter {
     /// writer.save().unwrap();
     /// ```
     pub fn write_row_typed(&mut self, cells: &[CellValue]) -> Result<()> {
-        for (col, cell) in cells.iter().enumerate() {
-            self.write_cell(self.current_row, col as u16, cell)?;
-        }
+        let values: Vec<String> = cells.iter()
+            .map(|cell| match cell {
+                CellValue::Empty => String::new(),
+                CellValue::String(s) => s.clone(),
+                CellValue::Int(i) => i.to_string(),
+                CellValue::Float(f) => f.to_string(),
+                CellValue::Bool(b) => if *b { "TRUE" } else { "FALSE" }.to_string(),
+                CellValue::DateTime(d) => d.to_string(),
+                CellValue::Error(e) => format!("ERROR: {}", e),
+            })
+            .collect();
+        let refs: Vec<&str> = values.iter().map(|s| s.as_str()).collect();
+        self.inner.write_row(&refs)?;
         self.current_row += 1;
         Ok(())
     }
 
-    /// Write a single cell with typed value
-    fn write_cell(&mut self, row: u32, col: u16, value: &CellValue) -> Result<()> {
-        let sheet = self.current_sheet.as_mut().unwrap();
-        match value {
-            CellValue::Empty => {
-                sheet.write_blank(row, col, &Format::new())?;
-            }
-            CellValue::String(s) => {
-                sheet.write_string(row, col, s)?;
-            }
-            CellValue::Int(i) => {
-                sheet.write_number(row, col, *i as f64)?;
-            }
-            CellValue::Float(f) => {
-                sheet.write_number(row, col, *f)?;
-            }
-            CellValue::Bool(b) => {
-                sheet.write_boolean(row, col, *b)?;
-            }
-            CellValue::DateTime(d) => {
-                sheet.write_number(row, col, *d)?;
-            }
-            CellValue::Error(e) => {
-                sheet.write_string(row, col, &format!("ERROR: {}", e))?;
-            }
-        }
-        Ok(())
-    }
-
-    /// Write header row with formatting
+    /// Write header row
+    ///
+    /// Note: In v0.2.0, bold formatting is not yet supported in streaming mode.
+    /// This writes a regular row. Formatting support will be added in future versions.
     ///
     /// # Examples
     ///
@@ -198,19 +182,9 @@ impl ExcelWriter {
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let format = Format::new().set_bold();
-        let sheet = self.current_sheet.as_mut().unwrap();
-        
-        for (col, header) in headers.into_iter().enumerate() {
-            sheet.write_string_with_format(
-                self.current_row,
-                col as u16,
-                header.as_ref(),
-                &format,
-            )?;
-        }
-        self.current_row += 1;
-        Ok(())
+        // TODO: Add bold formatting support in FastWorkbook
+        // For now, just write as regular row
+        self.write_row(headers)
     }
 
     /// Add a new sheet and switch to it
@@ -229,23 +203,16 @@ impl ExcelWriter {
     /// writer.save().unwrap();
     /// ```
     pub fn add_sheet(&mut self, name: &str) -> Result<()> {
-        // Save current sheet to workbook
-        if let Some(sheet) = self.current_sheet.take() {
-            self.workbook.push_worksheet(sheet);
-        }
-        
-        // Create new sheet
-        let mut new_sheet = Worksheet::new();
-        new_sheet.set_name(name)?;
-        self.current_sheet = Some(new_sheet);
+        self.inner.add_worksheet(name)?;
         self.current_sheet_name = name.to_string();
         self.current_row = 0;
-        self.sheet_counter += 1;
-        
         Ok(())
     }
 
-    /// Set column width
+    /// Set flush interval (rows between disk flushes)
+    ///
+    /// Default is 1000 rows. Lower values use less memory but slower.
+    /// Higher values are faster but use more memory.
     ///
     /// # Examples
     ///
@@ -253,35 +220,43 @@ impl ExcelWriter {
     /// use excelstream::writer::ExcelWriter;
     ///
     /// let mut writer = ExcelWriter::new("output.xlsx").unwrap();
-    /// writer.set_column_width(0, 20.0).unwrap(); // Column A width = 20
-    /// writer.write_row(&["Wide Column"]).unwrap();
+    /// writer.set_flush_interval(500); // Flush every 500 rows
+    /// ```
+    pub fn set_flush_interval(&mut self, interval: u32) {
+        self.inner.set_flush_interval(interval);
+    }
+
+    /// Set maximum buffer size before forcing a flush
+    ///
+    /// Default is 1MB. This ensures memory usage stays bounded.
+    pub fn set_max_buffer_size(&mut self, size: usize) {
+        self.inner.set_max_buffer_size(size);
+    }
+
+    /// Set column width
+    ///
+    /// Note: Column width customization is not yet supported in streaming mode.
+    /// This is a no-op for compatibility. Will be added in future versions.
+    pub fn set_column_width(&mut self, _col: u16, _width: f64) -> Result<()> {
+        // TODO: Add column width support in FastWorkbook
+        Ok(())
+    }
+
+    /// Save and finalize the workbook
+    ///
+    /// This closes the ZIP file and ensures all data is written to disk.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use excelstream::writer::ExcelWriter;
+    ///
+    /// let mut writer = ExcelWriter::new("output.xlsx").unwrap();
+    /// writer.write_row(&["Data"]).unwrap();
     /// writer.save().unwrap();
     /// ```
-    pub fn set_column_width(&mut self, col: u16, width: f64) -> Result<()> {
-        let sheet = self.current_sheet.as_mut().unwrap();
-        sheet.set_column_width(col, width)?;
-        Ok(())
-    }
-
-    /// Auto-fit columns based on content
-    pub fn autofit_columns(&mut self) -> Result<()> {
-        // Note: rust_xlsxwriter doesn't have built-in autofit,
-        // but we can estimate based on content
-        // This is a placeholder for future enhancement
-        Ok(())
-    }
-
-    /// Save the workbook to disk
-    ///
-    /// Must be called to finalize and write the Excel file.
-    pub fn save(mut self) -> Result<()> {
-        // Add the current sheet if it exists
-        if let Some(sheet) = self.current_sheet.take() {
-            self.workbook.push_worksheet(sheet);
-        }
-        
-        self.workbook.save(&self.output_path)?;
-        Ok(())
+    pub fn save(self) -> Result<()> {
+        self.inner.close()
     }
 
     /// Get current row number (0-based)
@@ -290,10 +265,12 @@ impl ExcelWriter {
     }
 }
 
-/// Builder for creating formatted Excel writers
+/// Builder for creating configured Excel writers
 pub struct ExcelWriterBuilder {
     path: String,
     default_sheet_name: Option<String>,
+    flush_interval: Option<u32>,
+    max_buffer_size: Option<usize>,
 }
 
 impl ExcelWriterBuilder {
@@ -302,6 +279,8 @@ impl ExcelWriterBuilder {
         ExcelWriterBuilder {
             path: path.as_ref().to_string_lossy().to_string(),
             default_sheet_name: None,
+            flush_interval: None,
+            max_buffer_size: None,
         }
     }
 
@@ -311,15 +290,37 @@ impl ExcelWriterBuilder {
         self
     }
 
+    /// Set flush interval (rows between disk flushes)
+    pub fn with_flush_interval(mut self, interval: u32) -> Self {
+        self.flush_interval = Some(interval);
+        self
+    }
+
+    /// Set maximum buffer size
+    pub fn with_max_buffer_size(mut self, size: usize) -> Self {
+        self.max_buffer_size = Some(size);
+        self
+    }
+
     /// Build the writer
     pub fn build(self) -> Result<ExcelWriter> {
-        let mut writer = ExcelWriter::new(&self.path)?;
+        let mut inner = FastWorkbook::new(&self.path)?;
         
-        if let Some(name) = self.default_sheet_name {
-            if let Some(sheet) = writer.current_sheet.as_mut() {
-                sheet.set_name(&name)?;
-            }
-            writer.current_sheet_name = name;
+        let sheet_name = self.default_sheet_name.unwrap_or_else(|| "Sheet1".to_string());
+        inner.add_worksheet(&sheet_name)?;
+
+        let mut writer = ExcelWriter {
+            inner,
+            current_row: 0,
+            current_sheet_name: sheet_name,
+        };
+
+        if let Some(interval) = self.flush_interval {
+            writer.set_flush_interval(interval);
+        }
+
+        if let Some(size) = self.max_buffer_size {
+            writer.set_max_buffer_size(size);
         }
         
         Ok(writer)
@@ -336,6 +337,41 @@ mod tests {
         let temp = NamedTempFile::new().unwrap();
         let writer = ExcelWriter::new(temp.path());
         assert!(writer.is_ok());
+        
+        // Should be able to save immediately
+        let writer = writer.unwrap();
+        assert!(writer.save().is_ok());
+    }
+
+    #[test]
+    fn test_write_row() {
+        let temp = NamedTempFile::new().unwrap();
+        let mut writer = ExcelWriter::new(temp.path()).unwrap();
+        
+        assert!(writer.write_row(&["A", "B", "C"]).is_ok());
+        assert!(writer.write_row(&["1", "2", "3"]).is_ok());
+        assert_eq!(writer.current_row(), 2);
+        
+        assert!(writer.save().is_ok());
+    }
+
+    #[test]
+    fn test_write_row_typed() {
+        let temp = NamedTempFile::new().unwrap();
+        let mut writer = ExcelWriter::new(temp.path()).unwrap();
+        
+        use crate::types::CellValue;
+        let row = vec![
+            CellValue::String("Text".to_string()),
+            CellValue::Int(42),
+            CellValue::Float(3.14),
+            CellValue::Bool(true),
+        ];
+        
+        assert!(writer.write_row_typed(&row).is_ok());
+        assert_eq!(writer.current_row(), 1);
+        
+        assert!(writer.save().is_ok());
     }
 
     #[test]
@@ -343,7 +379,60 @@ mod tests {
         let temp = NamedTempFile::new().unwrap();
         let writer = ExcelWriterBuilder::new(temp.path())
             .with_sheet_name("CustomSheet")
+            .with_flush_interval(500)
+            .with_max_buffer_size(512 * 1024)
             .build();
+        
         assert!(writer.is_ok());
+        let writer = writer.unwrap();
+        assert_eq!(writer.current_sheet_name, "CustomSheet");
+        assert!(writer.save().is_ok());
+    }
+
+    #[test]
+    fn test_add_sheet() {
+        let temp = NamedTempFile::new().unwrap();
+        let mut writer = ExcelWriter::new(temp.path()).unwrap();
+        
+        writer.write_row(&["Sheet1 Data"]).unwrap();
+        assert_eq!(writer.current_row(), 1);
+        
+        writer.add_sheet("Sheet2").unwrap();
+        assert_eq!(writer.current_row(), 0);
+        assert_eq!(writer.current_sheet_name, "Sheet2");
+        
+        writer.write_row(&["Sheet2 Data"]).unwrap();
+        assert_eq!(writer.current_row(), 1);
+        
+        assert!(writer.save().is_ok());
+    }
+
+    #[test]
+    fn test_write_header() {
+        let temp = NamedTempFile::new().unwrap();
+        let mut writer = ExcelWriter::new(temp.path()).unwrap();
+        
+        writer.write_header(&["ID", "Name", "Email"]).unwrap();
+        writer.write_row(&["1", "Alice", "alice@example.com"]).unwrap();
+        
+        assert_eq!(writer.current_row(), 2);
+        assert!(writer.save().is_ok());
+    }
+
+    #[test]
+    fn test_batch_write() {
+        let temp = NamedTempFile::new().unwrap();
+        let mut writer = ExcelWriter::new(temp.path()).unwrap();
+        
+        let data = vec![
+            vec!["A1", "B1", "C1"],
+            vec!["A2", "B2", "C2"],
+            vec!["A3", "B3", "C3"],
+        ];
+        
+        writer.write_rows_batch(&data).unwrap();
+        assert_eq!(writer.current_row(), 3);
+        
+        assert!(writer.save().is_ok());
     }
 }

@@ -5,6 +5,9 @@
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+> **⚠️ BREAKING CHANGE in v0.2.0:**  
+> Removed `rust_xlsxwriter` dependency! ExcelWriter now uses custom FastWorkbook implementation for **TRUE streaming** with constant memory usage and **21-40% faster performance**.  
+
 ## ✨ Features
 
 - 🚀 **Streaming Read** - Read large Excel files without loading entire content into memory

@@ -63,12 +63,6 @@ impl From<calamine::XlsError> for ExcelError {
     }
 }
 
-impl From<rust_xlsxwriter::XlsxError> for ExcelError {
-    fn from(err: rust_xlsxwriter::XlsxError) -> Self {
-        ExcelError::XlsxWriterError(err.to_string())
-    }
-}
-
 impl From<zip::result::ZipError> for ExcelError {
     fn from(err: zip::result::ZipError) -> Self {
         ExcelError::WriteError(err.to_string())
