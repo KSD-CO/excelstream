@@ -1,0 +1,32 @@
+/target
+/Cargo.lock
+**/*.rs.bk
+*.pdb
+*.swp
+*.swo
+*~
+
+# IDE
+.idea
+.vscode
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Examples output
+examples/*.xlsx
+examples/*.csv
+examples/*.xls
+
+# Test files
+tests/data/*.xlsx
+tests/data/*.xls
+!tests/data/sample.xlsx
+
+# Benchmarks
+benches/results/
+
+*.xls
+*.xlsx

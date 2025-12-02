@@ -1,0 +1,74 @@
+[package]
+name = "excelstream"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ton That Vu <ttvuhm@gmail.com>"]
+description = "High-performance streaming Excel library - Read/write large XLSX files with memory-efficient streaming"
+license = "MIT"
+repository = "https://github.com/KSD-CO/excelstream"
+keywords = ["excel", "xlsx", "streaming", "fast", "memory-efficient"]
+categories = ["parsing", "encoding"]
+
+[dependencies]
+calamine = "0.32"
+rust_xlsxwriter = "0.92"
+thiserror = "2.0"
+serde = { version = "1.0", features = ["derive"], optional = true }
+rayon = { version = "1.8", optional = true }
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
+# PostgreSQL dependencies (optional, only for examples)
+postgres = { version = "0.19", features = ["with-chrono-0_4"], optional = true }
+tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"], optional = true }
+deadpool-postgres = { version = "0.14", optional = true }
+tokio = { version = "1", features = ["full"], optional = true }
+chrono = { version = "0.4", optional = true }
+
+[dev-dependencies]
+tempfile = "3.8"
+criterion = "0.5"
+
+[features]
+default = []
+serde = ["dep:serde"]
+parallel = ["dep:rayon"]
+postgres = ["dep:postgres", "dep:chrono"]
+postgres-async = ["dep:tokio-postgres", "dep:deadpool-postgres", "dep:tokio", "dep:chrono"]
+
+[[bench]]
+name = "streaming_benchmark"
+harness = false
+
+[lib]
+name = "excelstream"
+path = "src/lib.rs"
+
+[[example]]
+name = "basic_read"
+path = "examples/basic_read.rs"
+
+[[example]]
+name = "basic_write"
+path = "examples/basic_write.rs"
+
+[[example]]
+name = "streaming_read"
+path = "examples/streaming_read.rs"
+
+[[example]]
+name = "streaming_write"
+path = "examples/streaming_write.rs"
+
+[[example]]
+name = "postgres_to_excel"
+path = "examples/postgres_to_excel.rs"
+required-features = ["postgres"]
+
+[[example]]
+name = "postgres_to_excel_advanced"
+path = "examples/postgres_to_excel_advanced.rs"
+required-features = ["postgres-async"]
+
+[[example]]
+name = "postgres_streaming"
+path = "examples/postgres_streaming.rs"
+required-features = ["postgres"]
