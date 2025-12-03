@@ -1,5 +1,6 @@
 //! Fast workbook implementation with ZIP compression
 
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -23,6 +24,11 @@ pub struct FastWorkbook {
     cell_ref_cache: Vec<String>, // Cache for cell references (A, B, C, ...)
     flush_interval: u32,         // Flush every N rows
     max_buffer_size: usize,      // Max buffer size before force flush
+
+    // Column width and row height support
+    column_widths: HashMap<u32, f64>, // column index -> width in Excel units
+    next_row_height: Option<f64>,     // height for next row in points
+    sheet_data_started: bool,         // track if <sheetData> element has been started
 }
 
 impl FastWorkbook {
@@ -32,9 +38,7 @@ impl FastWorkbook {
         let writer = BufWriter::with_capacity(64 * 1024, file); // 64KB buffer
         let mut zip = ZipWriter::new(writer);
 
-        let options = FileOptions::default()
-            .compression_method(CompressionMethod::Deflated)
-            .compression_level(Some(6)); // Balance between speed and compression
+        let options = Self::file_options();
 
         // Write [Content_Types].xml
         zip.start_file("[Content_Types].xml", options)?;
@@ -69,6 +73,11 @@ impl FastWorkbook {
             cell_ref_cache,
             flush_interval: 1000,         // Flush mỗi 1000 dòng
             max_buffer_size: 1024 * 1024, // 1MB max buffer
+
+            // Initialize column width and row height support
+            column_widths: HashMap::new(),
+            next_row_height: None,
+            sheet_data_started: false,
         })
     }
 
@@ -80,6 +89,107 @@ impl FastWorkbook {
     /// Set max buffer size (bytes) trước khi force flush
     pub fn set_max_buffer_size(&mut self, size: usize) {
         self.max_buffer_size = size;
+    }
+
+    /// Create file options with large file support enabled
+    fn file_options() -> FileOptions {
+        FileOptions::default()
+            .compression_method(CompressionMethod::Deflated)
+            .compression_level(Some(6))
+            .large_file(true) // Enable ZIP64 for files > 4GB
+    }
+
+    /// Set column width for the current worksheet
+    ///
+    /// Must be called after `add_worksheet()` but before writing any rows.
+    /// Width is in Excel units (approximately the width of '0' in standard font).
+    /// Default column width is 8.43 units.
+    ///
+    /// # Arguments
+    /// * `col` - Zero-based column index (0 = A, 1 = B, etc.)
+    /// * `width` - Column width in Excel units (typically 8-50)
+    ///
+    /// # Errors
+    /// Returns error if:
+    /// - No active worksheet
+    /// - Rows have already been written (sheetData already started)
+    pub fn set_column_width(&mut self, col: u32, width: f64) -> Result<()> {
+        if self.current_worksheet.is_none() {
+            return Err(crate::error::ExcelError::WriteError(
+                "No active worksheet. Call add_worksheet() first.".to_string(),
+            ));
+        }
+
+        if self.sheet_data_started {
+            return Err(crate::error::ExcelError::WriteError(
+                "Cannot set column width after writing rows. Set widths before write_row()."
+                    .to_string(),
+            ));
+        }
+
+        self.column_widths.insert(col, width);
+        Ok(())
+    }
+
+    /// Set height for the next row to be written
+    ///
+    /// Height is in points (1 point = 1/72 inch).
+    /// Default row height is 15 points.
+    /// This setting is consumed by the next write_row call.
+    ///
+    /// # Arguments
+    /// * `height` - Row height in points (typically 10-50)
+    ///
+    /// # Errors
+    /// Returns error if no active worksheet
+    pub fn set_next_row_height(&mut self, height: f64) -> Result<()> {
+        if self.current_worksheet.is_none() {
+            return Err(crate::error::ExcelError::WriteError(
+                "No active worksheet. Call add_worksheet() first.".to_string(),
+            ));
+        }
+
+        self.next_row_height = Some(height);
+        Ok(())
+    }
+
+    /// Ensure sheetData element has been started
+    /// Writes <cols> if needed, then starts <sheetData>
+    fn ensure_sheet_data_started(&mut self) -> Result<()> {
+        if self.sheet_data_started {
+            return Ok(());
+        }
+
+        let mut xml_writer = XmlWriter::new(&mut self.zip);
+
+        // Write <cols> element if we have column widths
+        if !self.column_widths.is_empty() {
+            xml_writer.start_element("cols")?;
+            xml_writer.close_start_tag()?;
+
+            // Sort columns for consistent output
+            let mut cols: Vec<_> = self.column_widths.iter().collect();
+            cols.sort_by_key(|(col, _)| *col);
+
+            for (col, width) in cols {
+                xml_writer.start_element("col")?;
+                xml_writer.attribute_int("min", (*col + 1) as i64)?; // Excel is 1-indexed
+                xml_writer.attribute_int("max", (*col + 1) as i64)?;
+                xml_writer.attribute("width", &width.to_string())?;
+                xml_writer.attribute("customWidth", "1")?;
+                xml_writer.write_raw(b"/>")?;
+            }
+
+            xml_writer.end_element("cols")?;
+        }
+
+        // Start sheetData
+        xml_writer.start_element("sheetData")?;
+        xml_writer.close_start_tag()?;
+        xml_writer.flush()?;
+
+        self.sheet_data_started = true;
+        Ok(())
     }
 
     /// Add a worksheet and get a writer for it
@@ -94,14 +204,12 @@ impl FastWorkbook {
 
         self.worksheets.push(name.to_string());
 
-        let options = FileOptions::default()
-            .compression_method(CompressionMethod::Deflated)
-            .compression_level(Some(6));
+        let options = Self::file_options();
 
         let sheet_path = format!("xl/worksheets/sheet{}.xml", sheet_id);
         self.zip.start_file(&sheet_path, options)?;
 
-        // Write worksheet header
+        // Write worksheet header ONLY (don't start sheetData yet)
         let mut xml_writer = XmlWriter::new(&mut self.zip);
         xml_writer.write_str("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n")?;
         xml_writer.start_element("worksheet")?;
@@ -114,12 +222,16 @@ impl FastWorkbook {
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
         )?;
         xml_writer.close_start_tag()?;
-        xml_writer.start_element("sheetData")?;
-        xml_writer.close_start_tag()?;
+        // DON'T start sheetData yet - will be done in ensure_sheet_data_started()
         xml_writer.flush()?;
 
+        // Reset state for new worksheet
         self.current_worksheet = Some(sheet_id);
         self.current_row = 0;
+        self.column_widths.clear();
+        self.next_row_height = None;
+        self.sheet_data_started = false;
+
         Ok(())
     }
 
@@ -131,15 +243,31 @@ impl FastWorkbook {
             ));
         }
 
+        // Ensure sheetData has been started (writes <cols> if needed)
+        self.ensure_sheet_data_started()?;
+
         self.current_row += 1;
         let row_num = self.current_row;
+
+        // Get row height if set
+        let row_height = self.next_row_height.take();
 
         // Build XML in buffer
         self.xml_buffer.clear();
         self.xml_buffer.extend_from_slice(b"<row r=\"");
         self.xml_buffer
             .extend_from_slice(row_num.to_string().as_bytes());
-        self.xml_buffer.extend_from_slice(b"\">");
+        self.xml_buffer.extend_from_slice(b"\"");
+
+        // Add height attribute if set
+        if let Some(height) = row_height {
+            self.xml_buffer.extend_from_slice(b" ht=\"");
+            self.xml_buffer
+                .extend_from_slice(height.to_string().as_bytes());
+            self.xml_buffer.extend_from_slice(b"\" customHeight=\"1\"");
+        }
+
+        self.xml_buffer.extend_from_slice(b">");
 
         for (col_idx, value) in values.iter().enumerate() {
             let string_index = self.shared_strings.add_string(value);
@@ -186,15 +314,31 @@ impl FastWorkbook {
             ));
         }
 
+        // Ensure sheetData has been started (writes <cols> if needed)
+        self.ensure_sheet_data_started()?;
+
         self.current_row += 1;
         let row_num = self.current_row;
+
+        // Get row height if set
+        let row_height = self.next_row_height.take();
 
         // Build XML in buffer
         self.xml_buffer.clear();
         self.xml_buffer.extend_from_slice(b"<row r=\"");
         self.xml_buffer
             .extend_from_slice(row_num.to_string().as_bytes());
-        self.xml_buffer.extend_from_slice(b"\">");
+        self.xml_buffer.extend_from_slice(b"\"");
+
+        // Add height attribute if set
+        if let Some(height) = row_height {
+            self.xml_buffer.extend_from_slice(b" ht=\"");
+            self.xml_buffer
+                .extend_from_slice(height.to_string().as_bytes());
+            self.xml_buffer.extend_from_slice(b"\" customHeight=\"1\"");
+        }
+
+        self.xml_buffer.extend_from_slice(b">");
 
         for (col_idx, cell) in cells.iter().enumerate() {
             let col_num = (col_idx + 1) as u32;
@@ -370,9 +514,7 @@ impl FastWorkbook {
         // Close current worksheet if any
         self.finish_current_worksheet()?;
 
-        let options = FileOptions::default()
-            .compression_method(CompressionMethod::Deflated)
-            .compression_level(Some(6));
+        let options = Self::file_options();
 
         // Write shared strings
         self.zip.start_file("xl/sharedStrings.xml", options)?;

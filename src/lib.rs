@@ -7,7 +7,7 @@
 //! - **Streaming Read**: Read large Excel files without loading entire file into memory
 //! - **Streaming Write**: Write millions of rows with constant ~80MB memory usage
 //! - **Formula Support**: Write Excel formulas that calculate correctly
-//! - **High Performance**: 21-47% faster than rust_xlsxwriter baseline
+//! - **High Performance**: 30K-45K rows/sec throughput with true streaming
 //! - **Better Errors**: Context-rich error messages with debugging info
 //! - **Multiple Formats**: Support for XLSX, XLS, ODS formats
 //! - **Type Safety**: Strong typing with Rust's type system

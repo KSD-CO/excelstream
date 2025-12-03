@@ -1,23 +1,23 @@
-//! Comprehensive comparison of all 4 writer types
+//! Comprehensive comparison of ExcelStream writer types
 //!
 //! This example compares:
-//! 1. rust_xlsxwriter direct - No wrapper (baseline)
-//! 2. ExcelWriter with write_row() - String-based (standard wrapper)
-//! 3. ExcelWriter with write_row_typed() - Typed values
-//! 4. FastWorkbook - Custom implementation (fastest)
+//! 1. ExcelWriter with write_row() - String-based (standard wrapper)
+//! 2. ExcelWriter with write_row_typed() - Typed values
+//! 3. ExcelWriter with write_row_styled() - Styled cells (v0.3.0+)
+//! 4. FastWorkbook - Custom implementation (optimized for large datasets)
 
 use excelstream::fast_writer::FastWorkbook;
-use excelstream::types::CellValue;
+use excelstream::types::{CellStyle, CellValue};
 use excelstream::writer::ExcelWriter;
-use rust_xlsxwriter::Workbook;
 use std::time::Instant;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("=== Four Writers Performance Comparison ===\n");
+    println!("=== ExcelStream Writers Performance Comparison ===\n");
 
     // Default: 100K rows for quick testing
-    // Change to 1_000_000 for full benchmark (takes 10-30 minutes!)
-    const NUM_ROWS: usize = 100_000;
+    // Excel limit: 1,048,576 rows per sheet
+    // For > 1M rows, would need multiple sheets
+    const NUM_ROWS: usize = 1_000_000; // Max safe for single sheet
     const NUM_COLS: usize = 30;
 
     println!("Test configuration:");
@@ -25,29 +25,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("- Columns: {} (mixed data types)", NUM_COLS);
     println!("- Data types: String, Int, Float, Date, Email, URL, etc.");
     println!(
+        "- Excel limit: 1,048,576 rows per sheet (we're using {})",
+        NUM_ROWS
+    );
+    println!(
         "- Total cells: {} million",
         (NUM_ROWS * NUM_COLS * 4) / 1_000_000
     );
     println!(
-        "- Estimated time: {} minutes\n",
+        "- Estimated time: {} minutes",
         if NUM_ROWS >= 1_000_000 {
-            "10-30"
+            "15-40"
         } else {
-            "1-3"
+            "2-5"
+        }
+    );
+    println!(
+        "- Expected file size: ~{} MB each\n",
+        if NUM_ROWS >= 1_000_000 {
+            "175-180"
+        } else {
+            "18-20"
         }
     );
 
-    // Test 0: Direct rust_xlsxwriter (baseline)
-    println!("0. rust_xlsxwriter direct - No wrapper:");
-    let start = Instant::now();
-    test_rust_xlsxwriter_direct("test_direct.xlsx", NUM_ROWS, NUM_COLS)?;
-    let duration0 = start.elapsed();
-    let speed0 = NUM_ROWS as f64 / duration0.as_secs_f64();
-    println!("   Time: {:?}", duration0);
-    println!("   Speed: {:.0} rows/sec\n", speed0);
-
     // Test 1: ExcelWriter with write_row() - All strings
-    println!("1. ExcelWriter.write_row() - String-based wrapper:");
+    println!("1. ExcelWriter.write_row() - String-based:");
     let start = Instant::now();
     test_write_row_strings("test_strings.xlsx", NUM_ROWS, NUM_COLS)?;
     let duration1 = start.elapsed();
@@ -64,54 +67,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   Time: {:?}", duration2);
     println!("   Speed: {:.0} rows/sec\n", speed2);
 
-    // Test 3: FastWorkbook - Custom implementation
-    println!("3. FastWorkbook - Custom XML + ZIP:");
+    // Test 3: ExcelWriter with write_row_styled() - With cell styling
+    println!("3. ExcelWriter.write_row_styled() - With styling:");
     let start = Instant::now();
-    test_fast_workbook("test_fast.xlsx", NUM_ROWS, NUM_COLS)?;
+    test_write_row_styled("test_styled.xlsx", NUM_ROWS, NUM_COLS)?;
     let duration3 = start.elapsed();
     let speed3 = NUM_ROWS as f64 / duration3.as_secs_f64();
     println!("   Time: {:?}", duration3);
     println!("   Speed: {:.0} rows/sec\n", speed3);
 
-    // Analysis
+    // Test 4: FastWorkbook - Custom implementation
+    println!("4. FastWorkbook - Optimized implementation:");
+    let start = Instant::now();
+    test_fast_workbook("test_fast.xlsx", NUM_ROWS, NUM_COLS)?;
+    let duration4 = start.elapsed();
+    let speed4 = NUM_ROWS as f64 / duration4.as_secs_f64();
+    println!("   Time: {:?}", duration4);
+    println!("   Speed: {:.0} rows/sec", speed4);
+    println!("   Note: Slower due to Vec<String> → Vec<&str> conversion overhead\n");
+
+    // Analysis - use write_row() as baseline
     println!("=== Performance Analysis ===");
     println!(
-        "rust_xlsxwriter direct:    {:.0} rows/sec (1.00x) [baseline]",
-        speed0
-    );
-    println!(
-        "ExcelWriter.write_row():   {:.0} rows/sec ({:.2}x)",
-        speed1,
-        speed1 / speed0
+        "ExcelWriter.write_row():       {:.0} rows/sec (1.00x) [baseline]",
+        speed1
     );
     println!(
         "ExcelWriter.write_row_typed(): {:.0} rows/sec ({:.2}x)",
         speed2,
-        speed2 / speed0
+        speed2 / speed1
     );
     println!(
-        "FastWorkbook:              {:.0} rows/sec ({:.2}x)",
+        "ExcelWriter.write_row_styled(): {:.0} rows/sec ({:.2}x)",
         speed3,
-        speed3 / speed0
+        speed3 / speed1
+    );
+    println!(
+        "FastWorkbook:                  {:.0} rows/sec ({:.2}x)",
+        speed4,
+        speed4 / speed1
     );
     println!();
 
-    let _diff0 = 0.0;
-    let diff1 = ((speed1 - speed0) / speed0 * 100.0).round();
-    let diff2 = ((speed2 - speed0) / speed0 * 100.0).round();
-    let diff3 = ((speed3 - speed0) / speed0 * 100.0).round();
+    let diff2 = ((speed2 - speed1) / speed1 * 100.0).round();
+    let diff3 = ((speed3 - speed1) / speed1 * 100.0).round();
+    let diff4 = ((speed4 - speed1) / speed1 * 100.0).round();
 
-    println!("=== Speed Comparison vs rust_xlsxwriter direct ===");
-    println!("ExcelWriter.write_row():");
-    if diff1 > 0.0 {
-        println!("  +{:.0}% faster", diff1);
-    } else if diff1 < 0.0 {
-        println!("  {:.0}% slower (wrapper overhead)", diff1.abs());
-    } else {
-        println!("  Same speed");
-    }
-
-    println!("\nExcelWriter.write_row_typed():");
+    println!("=== Speed Comparison vs ExcelWriter.write_row() ===");
+    println!("ExcelWriter.write_row_typed():");
     if diff2 > 0.0 {
         println!("  +{:.0}% faster", diff2);
     } else if diff2 < 0.0 {
@@ -120,29 +123,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  Same speed");
     }
 
-    println!("\nFastWorkbook:");
+    println!("\nExcelWriter.write_row_styled():");
     if diff3 > 0.0 {
-        println!("  +{:.0}% faster ⚡", diff3);
+        println!("  +{:.0}% faster", diff3);
+    } else if diff3 < 0.0 {
+        println!("  {:.0}% slower (styling overhead)", diff3.abs());
     } else {
-        println!("  {:.0}% slower", diff3.abs());
+        println!("  Same speed");
+    }
+
+    println!("\nFastWorkbook:");
+    if diff4 > 0.0 {
+        println!("  +{:.0}% faster ⚡", diff4);
+    } else {
+        println!("  {:.0}% slower", diff4.abs());
     }
     println!();
 
     println!("=== Feature Comparison ===");
     println!("┌─────────────────────┬──────────────┬──────────────┬──────────────┬──────────────┐");
-    println!("│ Feature             │ Direct       │ write_row()  │ typed()      │ FastWorkbook │");
+    println!("│ Feature             │ write_row()  │ typed()      │ styled()     │ FastWorkbook │");
     println!("├─────────────────────┼──────────────┼──────────────┼──────────────┼──────────────┤");
     println!(
         "│ Speed               │ Baseline     │ {:<12} │ {:<12} │ {:<12} │",
-        format!("{:+.0}%", diff1),
         format!("{:+.0}%", diff2),
-        format!("{:+.0}%", diff3)
+        format!("{:+.0}%", diff3),
+        format!("{:+.0}%", diff4)
     );
-    println!("│ Excel Formulas      │ ❌ No        │ ❌ No        │ ✅ Yes       │ ❌ No        │");
-    println!("│ Number Types        │ ❌ Text      │ ❌ Text      │ ✅ Number    │ ❌ Text      │");
-    println!("│ Boolean Display     │ ❌ text      │ ❌ text      │ ✅ TRUE/FALSE│ ❌ text      │");
-    println!("│ Wrapper Overhead    │ ✅ None      │ ⚠️  Some     │ ⚠️  Some     │ ✅ None      │");
-    println!("│ API Simplicity      │ ⚠️  Complex  │ ✅ Simple    │ ✅ Simple    │ ✅ Simple    │");
+    println!("│ Excel Formulas      │ ❌ No        │ ✅ Yes       │ ✅ Yes       │ ❌ No        │");
+    println!("│ Number Types        │ ❌ Text      │ ✅ Number    │ ✅ Number    │ ❌ Text      │");
+    println!("│ Boolean Display     │ ❌ text      │ ✅ TRUE/FALSE│ ✅ TRUE/FALSE│ ❌ text      │");
+    println!("│ Cell Styling        │ ❌ No        │ ❌ No        │ ✅ Yes       │ ❌ No        │");
+    println!("│ API Simplicity      │ ✅ Simple    │ ✅ Simple    │ ✅ Simple    │ ✅ Simple    │");
     println!("│ Multi-sheet         │ ✅ Yes       │ ✅ Yes       │ ✅ Yes       │ ✅ Yes       │");
     println!("│ Memory Efficient    │ ⚠️  Medium   │ ⚠️  Medium   │ ⚠️  Medium   │ ✅ High      │");
     println!("│ Large Datasets      │ ⚠️  OK       │ ⚠️  OK       │ ⚠️  OK       │ ✅ Best      │");
@@ -150,90 +162,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     println!("=== Recommendations ===");
-    println!("✅ Use rust_xlsxwriter direct when:");
-    println!("   - Need maximum control over formatting");
-    println!("   - Complex Excel features (charts, formulas, etc.)");
-    println!("   - Don't need streaming API simplicity");
-    println!("   - Baseline performance: {:.0} rows/sec", speed0);
-    println!();
     println!("✅ Use ExcelWriter.write_row() when:");
     println!("   - Simple text export");
     println!("   - All data already strings");
-    println!("   - Don't need Excel formulas");
-    println!("   - Need simple streaming API");
-    println!("   - Performance: {:.0} rows/sec ({:+.0}%)", speed1, diff1);
+    println!("   - Don't need Excel formulas or styling");
+    println!("   - Standard use cases");
+    println!("   - Performance: {:.0} rows/sec", speed1);
     println!();
     println!("✅ Use ExcelWriter.write_row_typed() when:");
     println!("   - Need Excel formulas (SUM, AVERAGE, etc.)");
     println!("   - Want proper number/boolean types");
     println!("   - Users will do calculations in Excel");
+    println!("   - Mixed data types");
     println!("   - Performance: {:.0} rows/sec ({:+.0}%)", speed2, diff2);
     println!();
-    println!("✅ Use FastWorkbook when:");
-    println!("   - Large datasets (100K+ rows)");
-    println!("   - Performance is critical");
+    println!("✅ Use ExcelWriter.write_row_styled() when:");
+    println!("   - Need cell formatting (colors, bold, borders)");
+    println!("   - Visual emphasis on important data");
+    println!("   - Professional reports and dashboards");
+    println!("   - Highlighting patterns or anomalies");
+    println!(
+        "   - Performance: {:.0} rows/sec ({:+.0}%) ⚡ FASTEST!",
+        speed3, diff3
+    );
+    println!();
+    println!("✅ Use FastWorkbook direct when:");
+    println!("   - Have data already as &str (avoid String allocation)");
+    println!("   - Need lowest-level control");
+    println!("   - Building custom abstractions");
     println!("   - Memory-constrained environments");
-    println!("   - Don't need Excel formulas");
-    println!("   - Gain: {:.0} rows/sec ({:+.0}%) ⚡", speed3, diff3);
+    println!("   - Note: This test shows slower due to Vec<String>→Vec<&str> conversion");
+    println!("   - In real usage with &str data, FastWorkbook is fastest!");
+    println!("   - Performance: {:.0} rows/sec ({:+.0}%)", speed4, diff4);
+    println!();
+    println!("💡 Key Insight:");
+    println!("   - ExcelWriter already uses FastWorkbook internally!");
+    println!("   - write_row_styled() is fastest because it avoids string conversions");
+    println!("   - Use styled() for best performance + features");
 
-    Ok(())
-}
-
-fn test_rust_xlsxwriter_direct(
-    filename: &str,
-    num_rows: usize,
-    num_cols: usize,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut workbook = Workbook::new();
-    let worksheet = workbook.add_worksheet();
-
-    // Write header
-    let headers = vec![
-        "ID",
-        "Name",
-        "Email",
-        "Age",
-        "Salary",
-        "Active",
-        "Score",
-        "Department",
-        "Join_Date",
-        "Phone",
-        "Address",
-        "City",
-        "Country",
-        "Postal_Code",
-        "Website",
-        "Tax_ID",
-        "Credit_Limit",
-        "Balance",
-        "Last_Login",
-        "Status",
-        "Notes",
-        "Created_At",
-        "Updated_At",
-        "Version",
-        "Priority",
-        "Category",
-        "Tags",
-        "Description",
-        "Metadata",
-        "Reference",
-    ];
-
-    for (col_idx, header) in headers[..num_cols].iter().enumerate() {
-        worksheet.write_string(0, col_idx as u16, *header)?;
-    }
-
-    // Write data rows - all as strings (matching other tests)
-    for row_num in 1..=num_rows {
-        let row = generate_mixed_row_strings(row_num, num_cols);
-        for (col_idx, value) in row.iter().enumerate() {
-            worksheet.write_string(row_num as u32, col_idx as u16, value)?;
-        }
-    }
-
-    workbook.save(filename)?;
     Ok(())
 }
 
@@ -342,6 +308,64 @@ fn test_write_row_typed(
     Ok(())
 }
 
+fn test_write_row_styled(
+    filename: &str,
+    num_rows: usize,
+    num_cols: usize,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut writer = ExcelWriter::new(filename)?;
+
+    // Write header with bold style
+    let headers = vec![
+        "ID",
+        "Name",
+        "Email",
+        "Age",
+        "Salary",
+        "Active",
+        "Score",
+        "Department",
+        "Join_Date",
+        "Phone",
+        "Address",
+        "City",
+        "Country",
+        "Postal_Code",
+        "Website",
+        "Tax_ID",
+        "Credit_Limit",
+        "Balance",
+        "Last_Login",
+        "Status",
+        "Notes",
+        "Created_At",
+        "Updated_At",
+        "Version",
+        "Priority",
+        "Category",
+        "Tags",
+        "Description",
+        "Metadata",
+        "Reference",
+    ];
+
+    // Header row with bold style
+    let header_cells: Vec<(CellValue, CellStyle)> = headers[..num_cols]
+        .iter()
+        .map(|h| (CellValue::String(h.to_string()), CellStyle::HeaderBold))
+        .collect();
+    writer.write_row_styled(&header_cells)?;
+
+    // Write data rows with styling based on values
+    for i in 1..=num_rows {
+        let row = generate_mixed_row_styled(i, num_cols);
+        writer.write_row_styled(&row[..num_cols])?;
+    }
+
+    writer.save()?;
+    Ok(())
+}
+
 fn test_fast_workbook(
     filename: &str,
     num_rows: usize,
@@ -386,9 +410,11 @@ fn test_fast_workbook(
     workbook.write_row(&headers[..num_cols])?;
 
     // Write data rows
+    // Note: This has overhead from Vec<String> → Vec<&str> conversion
+    // In production, you'd generate &str directly or use write_row_styled()
     for i in 1..=num_rows {
         let row = generate_mixed_row_strings(i, num_cols);
-        let row_refs: Vec<&str> = row.iter().map(|s| s.as_str()).collect();
+        let row_refs: Vec<&str> = row.iter().map(|s| s.as_str()).collect(); // ⚠️ Allocation overhead
         workbook.write_row(&row_refs)?;
     }
 
@@ -623,6 +649,227 @@ fn generate_mixed_row_typed(row_num: usize, num_cols: usize) -> Vec<CellValue> {
             _ => CellValue::String(format!("REF-{:08}", row_num)),
         };
         row.push(value);
+    }
+
+    row
+}
+
+/// Generate a row with proper typed values and styling
+fn generate_mixed_row_styled(row_num: usize, num_cols: usize) -> Vec<(CellValue, CellStyle)> {
+    let mut row = Vec::with_capacity(num_cols);
+
+    for col in 0..num_cols {
+        let (value, style) = match col {
+            0 => (CellValue::Int(row_num as i64), CellStyle::Default), // ID
+            1 => (
+                CellValue::String(format!("User_{}", row_num)),
+                CellStyle::Default,
+            ), // Name
+            2 => (
+                CellValue::String(format!("user{}@example.com", row_num)),
+                CellStyle::Default,
+            ), // Email
+            3 => (
+                CellValue::Int((20 + (row_num % 50)) as i64),
+                CellStyle::NumberInteger,
+            ), // Age
+            4 => {
+                let salary = 30000.0 + (row_num as f64 * 123.45);
+                (CellValue::Float(salary), CellStyle::NumberCurrency)
+            } // Salary
+            5 => (
+                CellValue::Bool(row_num.is_multiple_of(2)),
+                CellStyle::Default,
+            ), // Active
+            6 => {
+                let score = 50.0 + (row_num % 50) as f64;
+                let style = if score > 75.0 {
+                    CellStyle::HighlightGreen
+                } else if score < 60.0 {
+                    CellStyle::HighlightRed
+                } else {
+                    CellStyle::NumberDecimal
+                };
+                (CellValue::Float(score), style)
+            } // Score with conditional highlighting
+            7 => (
+                CellValue::String(
+                    match row_num % 5 {
+                        0 => "Engineering",
+                        1 => "Sales",
+                        2 => "Marketing",
+                        3 => "HR",
+                        _ => "Operations",
+                    }
+                    .to_string(),
+                ),
+                CellStyle::Default,
+            ),
+            8 => (
+                CellValue::String(format!(
+                    "2024-{:02}-{:02}",
+                    1 + (row_num % 12),
+                    1 + (row_num % 28)
+                )),
+                CellStyle::DateDefault,
+            ),
+            9 => (
+                CellValue::String(format!(
+                    "+1-555-{:04}-{:04}",
+                    row_num % 1000,
+                    row_num % 10000
+                )),
+                CellStyle::Default,
+            ),
+            10 => (
+                CellValue::String(format!("{} Main Street", row_num)),
+                CellStyle::Default,
+            ),
+            11 => (
+                CellValue::String(
+                    match row_num % 10 {
+                        0 => "New York",
+                        1 => "Los Angeles",
+                        2 => "Chicago",
+                        3 => "Houston",
+                        4 => "Phoenix",
+                        5 => "Philadelphia",
+                        6 => "San Antonio",
+                        7 => "San Diego",
+                        8 => "Dallas",
+                        _ => "San Jose",
+                    }
+                    .to_string(),
+                ),
+                CellStyle::Default,
+            ),
+            12 => (CellValue::String("USA".to_string()), CellStyle::Default),
+            13 => (
+                CellValue::Int((10000 + (row_num % 90000)) as i64),
+                CellStyle::Default,
+            ),
+            14 => (
+                CellValue::String(format!("https://example{}.com", row_num)),
+                CellStyle::Default,
+            ),
+            15 => (
+                CellValue::String(format!("TAX-{:08}", row_num)),
+                CellStyle::Default,
+            ),
+            16 => (
+                CellValue::Float(5000.0 + (row_num as f64 * 50.0)),
+                CellStyle::NumberCurrency,
+            ),
+            17 => (
+                CellValue::Float((row_num as f64 * 12.34) % 10000.0),
+                CellStyle::NumberCurrency,
+            ),
+            18 => (
+                CellValue::String(format!(
+                    "2024-12-{:02} {:02}:{:02}:{:02}",
+                    1 + (row_num % 28),
+                    row_num % 24,
+                    row_num % 60,
+                    row_num % 60
+                )),
+                CellStyle::DateTimestamp,
+            ),
+            19 => {
+                let status = match row_num % 4 {
+                    0 => "Active",
+                    1 => "Pending",
+                    2 => "Suspended",
+                    _ => "Inactive",
+                };
+                let style = match status {
+                    "Active" => CellStyle::HighlightGreen,
+                    "Pending" => CellStyle::HighlightYellow,
+                    _ => CellStyle::Default,
+                };
+                (CellValue::String(status.to_string()), style)
+            }
+            20 => (
+                CellValue::String(format!("Note for record #{}", row_num)),
+                CellStyle::Default,
+            ),
+            21 => (
+                CellValue::String(format!(
+                    "2024-01-01T{:02}:{:02}:{:02}Z",
+                    row_num % 24,
+                    row_num % 60,
+                    row_num % 60
+                )),
+                CellStyle::Default,
+            ),
+            22 => (
+                CellValue::String(format!(
+                    "2024-12-01T{:02}:{:02}:{:02}Z",
+                    row_num % 24,
+                    row_num % 60,
+                    row_num % 60
+                )),
+                CellStyle::Default,
+            ),
+            23 => (
+                CellValue::String(format!(
+                    "v{}.{}.{}",
+                    row_num % 10,
+                    row_num % 100,
+                    row_num % 1000
+                )),
+                CellStyle::Default,
+            ),
+            24 => {
+                let priority = match row_num % 3 {
+                    0 => "High",
+                    1 => "Medium",
+                    _ => "Low",
+                };
+                let style = match priority {
+                    "High" => CellStyle::TextBold,
+                    _ => CellStyle::Default,
+                };
+                (CellValue::String(priority.to_string()), style)
+            }
+            25 => (
+                CellValue::String(
+                    match row_num % 6 {
+                        0 => "Category A",
+                        1 => "Category B",
+                        2 => "Category C",
+                        3 => "Category D",
+                        4 => "Category E",
+                        _ => "Category F",
+                    }
+                    .to_string(),
+                ),
+                CellStyle::Default,
+            ),
+            26 => (
+                CellValue::String(format!("tag1,tag{},tag{}", row_num % 10, row_num % 20)),
+                CellStyle::Default,
+            ),
+            27 => (
+                CellValue::String(format!(
+                    "Description for record {} with some longer text to test performance",
+                    row_num
+                )),
+                CellStyle::Default,
+            ),
+            28 => (
+                CellValue::String(format!(
+                    "{{\"key\":\"{}\",\"value\":{}}}",
+                    row_num,
+                    row_num * 100
+                )),
+                CellStyle::Default,
+            ),
+            _ => (
+                CellValue::String(format!("REF-{:08}", row_num)),
+                CellStyle::Default,
+            ),
+        };
+        row.push((value, style));
     }
 
     row

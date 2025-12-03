@@ -352,3 +352,128 @@ fn test_error_messages() {
         }
     }
 }
+
+#[test]
+fn test_row_height() {
+    let temp = NamedTempFile::new().unwrap();
+    let path = temp.path().to_string_lossy().to_string();
+
+    {
+        let mut writer = ExcelWriter::new(&path).unwrap();
+
+        // Set height for first row
+        writer.set_next_row_height(30.0).unwrap();
+        writer.write_row(["Tall row"]).unwrap();
+
+        // Normal row (default height)
+        writer.write_row(["Normal row"]).unwrap();
+
+        // Another tall row
+        writer.set_next_row_height(25.0).unwrap();
+        writer.write_row(["Another tall row"]).unwrap();
+
+        writer.save().unwrap();
+    }
+
+    // Verify file was created successfully
+    assert!(std::path::Path::new(&path).exists());
+}
+
+#[test]
+fn test_column_width_and_row_height_together() {
+    let temp = NamedTempFile::new().unwrap();
+    let path = temp.path().to_string_lossy().to_string();
+
+    {
+        let mut writer = ExcelWriter::new(&path).unwrap();
+
+        // Set column widths
+        writer.set_column_width(0, 25.0).unwrap();
+        writer.set_column_width(1, 15.0).unwrap();
+        writer.set_column_width(2, 20.0).unwrap();
+
+        // Write header with custom height
+        writer.set_next_row_height(25.0).unwrap();
+        writer.write_header_bold(["Name", "Age", "Email"]).unwrap();
+
+        // Regular data rows
+        writer
+            .write_row(["Alice", "30", "alice@example.com"])
+            .unwrap();
+        writer.write_row(["Bob", "25", "bob@example.com"]).unwrap();
+
+        writer.save().unwrap();
+    }
+
+    // Verify file was created successfully
+    assert!(std::path::Path::new(&path).exists());
+
+    // Read back and verify data
+    {
+        let mut reader = ExcelReader::open(&path).unwrap();
+        let rows: Vec<_> = reader
+            .rows_by_index(0)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].get(0).unwrap().as_string(), "Name");
+        assert_eq!(rows[1].get(0).unwrap().as_string(), "Alice");
+        assert_eq!(rows[2].get(0).unwrap().as_string(), "Bob");
+    }
+}
+
+#[test]
+fn test_column_width_must_be_set_before_rows() {
+    let temp = NamedTempFile::new().unwrap();
+    let path = temp.path().to_string_lossy().to_string();
+
+    {
+        let mut writer = ExcelWriter::new(&path).unwrap();
+
+        // Write a row first
+        writer.write_row(["Data"]).unwrap();
+
+        // Try to set column width after writing rows - should fail
+        let result = writer.set_column_width(0, 20.0);
+        assert!(result.is_err());
+
+        if let Err(e) = result {
+            let error_msg = e.to_string();
+            assert!(error_msg.contains("Cannot set column width after writing rows"));
+        }
+
+        writer.save().unwrap();
+    }
+}
+
+#[test]
+fn test_multiple_sheets_with_column_widths() {
+    let temp = NamedTempFile::new().unwrap();
+    let path = temp.path().to_string_lossy().to_string();
+
+    {
+        let mut writer = ExcelWriter::new(&path).unwrap();
+
+        // Sheet 1 with column widths
+        writer.set_column_width(0, 20.0).unwrap();
+        writer.set_column_width(1, 15.0).unwrap();
+        writer.write_row(["Sheet1", "Data"]).unwrap();
+
+        // Sheet 2 with different column widths
+        writer.add_sheet("Sheet2").unwrap();
+        writer.set_column_width(0, 30.0).unwrap();
+        writer.set_column_width(1, 25.0).unwrap();
+        writer.write_row(["Sheet2", "Data"]).unwrap();
+
+        writer.save().unwrap();
+    }
+
+    // Verify both sheets exist
+    {
+        let reader = ExcelReader::open(&path).unwrap();
+        let sheets = reader.sheet_names();
+        assert!(sheets.len() >= 2);
+    }
+}

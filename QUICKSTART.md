@@ -330,8 +330,7 @@ excelstream/
 ## Main Dependencies
 
 - **calamine** 0.32 - Excel reader (multi-format support)
-- **rust_xlsxwriter** 0.92 - Excel writer (standard)
-- **zip** 2.2 - Fast writer ZIP handling
+- **zip** 2.2 - ZIP compression for .xlsx files
 - **thiserror** 2.0 - Error handling
 - **postgres** 0.19 - PostgreSQL sync client (optional)
 - **tokio-postgres** 0.7 - PostgreSQL async client (optional)

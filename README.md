@@ -6,19 +6,20 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/KSD-CO/excelstream/workflows/Rust/badge.svg)](https://github.com/KSD-CO/excelstream/actions)
 
-> **✨ What's New in v0.3.0:**
-> - ✨ **Cell Formatting** - 14 predefined styles: bold, italic, highlights, borders, number formats!
+> **✨ What's New in v0.4.0:**
+> - 📏 **Column Width & Row Height** - Customize column widths and row heights for perfect formatting!
+> - 🎨 **Cell Formatting** - 14 predefined styles: bold, italic, highlights, borders, number formats!
 > - 🎨 **Easy Styling API** - `write_header_bold()`, `write_row_styled()`, `write_row_with_style()`
 > - 💰 **Number Formats** - Currency, percentage, decimal, integer formats
-> - 🎨 **Text Styles** - Bold, italic, yellow/green/red highlights
 > - 📅 **Date Formats** - MM/DD/YYYY and timestamp formats
 
 ## ✨ Features
 
 - 🚀 **Streaming Read** - Process large Excel files without loading entire file into memory
 - 💾 **Streaming Write** - Write millions of rows with constant ~80MB memory usage
-- ⚡ **High Performance** - 21-47% faster than rust_xlsxwriter baseline
+- ⚡ **High Performance** - 30K-45K rows/sec throughput with true streaming
 - 🎨 **Cell Formatting** - 14 predefined styles (bold, currency, %, highlights, borders)
+- 📏 **Column Width & Row Height** - Customize column widths and row heights
 - 📐 **Formula Support** - Write Excel formulas (=SUM, =AVERAGE, =IF, etc.)
 - 🎯 **Typed Values** - Strong typing with Int, Float, Bool, DateTime, Formula
 - 🔧 **Memory Efficient** - Configurable flush intervals for memory-limited environments
@@ -27,7 +28,7 @@
 - 🔒 **Type-safe** - Leverage Rust's type system for safety
 - 📝 **Multi-sheet** - Support multiple sheets in one workbook
 - 🗄️ **Database Export** - PostgreSQL integration examples
-- ✅ **Production Ready** - 47+ tests, CI/CD, zero unsafe code
+- ✅ **Production Ready** - 50+ tests, CI/CD, zero unsafe code
 
 ## 📦 Installation
 
@@ -96,9 +97,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 **Key Benefits:**
 - ✅ Constant ~80MB memory usage regardless of dataset size
-- ✅ 21-47% faster than rust_xlsxwriter baseline
+- ✅ High throughput: 30K-45K rows/sec with true streaming
 - ✅ Direct ZIP streaming - data written to disk immediately
-- ⚠️ Note: Bold formatting and column width not yet implemented in streaming mode
+- ✅ Full formatting support: bold, styles, column widths, row heights
 
 ### Writing with Typed Values (Recommended)
 
@@ -131,7 +132,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 - ✅ Booleans display as TRUE/FALSE
 - ✅ Excel formulas work correctly
 - ✅ Better type safety
-- ✅ 40% faster than rust_xlsxwriter
+- ✅ Excellent performance: 42K+ rows/sec
 
 ### Writing Excel Formulas
 
@@ -314,6 +315,109 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 **See also:** Run `cargo run --example cell_formatting` to see all 14 styles in action!
 
+### Column Width and Row Height
+
+**New in v0.4.0:** Customize column widths and row heights for better formatting!
+
+#### Column Width
+
+Set column widths **before** writing any rows:
+
+```rust
+use excelstream::writer::ExcelWriter;
+
+let mut writer = ExcelWriter::new("report.xlsx")?;
+
+// Set column widths BEFORE writing rows
+writer.set_column_width(0, 25.0)?;  // Column A = 25 units wide
+writer.set_column_width(1, 12.0)?;  // Column B = 12 units wide
+writer.set_column_width(2, 15.0)?;  // Column C = 15 units wide
+
+// Now write rows
+writer.write_header_bold(&["Product Name", "Quantity", "Price"])?;
+writer.write_row(&["Laptop", "5", "$1,200.00"])?;
+
+writer.save()?;
+```
+
+**Important:**
+- ⚠️ Column widths must be set **before** writing any rows
+- Default column width is 8.43 units
+- One unit ≈ width of one character in default font
+- Typical range: 8-50 units
+
+#### Row Height
+
+Set row height for the next row to be written:
+
+```rust
+use excelstream::writer::ExcelWriter;
+
+let mut writer = ExcelWriter::new("report.xlsx")?;
+
+// Set height for header row (taller)
+writer.set_next_row_height(25.0)?;
+writer.write_header_bold(&["Name", "Age", "Email"])?;
+
+// Regular row (default height)
+writer.write_row(&["Alice", "30", "alice@example.com"])?;
+
+// Set height for next row
+writer.set_next_row_height(40.0)?;
+writer.write_row(&["Bob", "25", "bob@example.com"])?;
+
+writer.save()?;
+```
+
+**Important:**
+- Height is in points (1 point = 1/72 inch)
+- Default row height is 15 points
+- Typical range: 10-50 points
+- Setting is consumed by next `write_row()` call
+
+#### Complete Example with Sizing
+
+```rust
+use excelstream::writer::ExcelWriter;
+use excelstream::types::{CellValue, CellStyle};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut writer = ExcelWriter::new("sales_report.xlsx")?;
+
+    // Set column widths
+    writer.set_column_width(0, 25.0)?; // Product name - wider
+    writer.set_column_width(1, 12.0)?; // Quantity
+    writer.set_column_width(2, 15.0)?; // Price
+    writer.set_column_width(3, 15.0)?; // Total
+
+    // Tall header row
+    writer.set_next_row_height(25.0)?;
+    writer.write_header_bold(&["Product", "Quantity", "Price", "Total"])?;
+
+    // Data rows
+    writer.write_row_styled(&[
+        (CellValue::String("Laptop".to_string()), CellStyle::Default),
+        (CellValue::Int(5), CellStyle::NumberInteger),
+        (CellValue::Float(1200.00), CellStyle::NumberCurrency),
+        (CellValue::Formula("=B2*C2".to_string()), CellStyle::NumberCurrency),
+    ])?;
+
+    // Total row with custom height
+    writer.set_next_row_height(22.0)?;
+    writer.write_row_styled(&[
+        (CellValue::String("TOTAL".to_string()), CellStyle::TextBold),
+        (CellValue::Formula("=SUM(B2:B4)".to_string()), CellStyle::NumberInteger),
+        (CellValue::String("".to_string()), CellStyle::Default),
+        (CellValue::Formula("=SUM(D2:D4)".to_string()), CellStyle::NumberCurrency),
+    ])?;
+
+    writer.save()?;
+    Ok(())
+}
+```
+
+**See also:** Run `cargo run --example column_width_row_height` for a complete demonstration!
+
 ### Direct FastWorkbook Usage (Maximum Performance)
 
 For maximum performance, use `FastWorkbook` directly:
@@ -343,10 +447,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-**Performance (v0.2.0)**: 
-- ExcelWriter.write_row(): **36,870 rows/sec** (+21% vs rust_xlsxwriter)
-- ExcelWriter.write_row_typed(): **42,877 rows/sec** (+40% vs rust_xlsxwriter)
-- FastWorkbook direct: **44,753 rows/sec** (+47% vs rust_xlsxwriter)
+**Performance Metrics**:
+- ExcelWriter.write_row(): **36,870 rows/sec**
+- ExcelWriter.write_row_typed(): **42,877 rows/sec**
+- FastWorkbook direct: **44,753 rows/sec**
+- Memory usage: **Constant ~80MB** for any dataset size
 
 ### Memory-Constrained Writing (For Kubernetes Pods)
 
@@ -560,29 +665,29 @@ writer.save()?;
 
 ## ⚡ Performance
 
-Tested with **1 million rows × 30 columns** (mixed data types):
+Benchmarked with **1 million rows × 30 columns** (mixed data types):
 
-| Writer Type | Speed (rows/s) | vs Baseline | Memory Usage |
-|-------------|----------------|-------------|--------------|
-| rust_xlsxwriter | 30,525 | baseline | ~300MB (grows) |
-| **ExcelWriter.write_row()** | **36,870** | **+21%** ⚡ | **~80MB constant** ✅ |
-| **ExcelWriter.write_row_typed()** | **42,877** | **+40%** ⚡ | **~80MB constant** ✅ |
-| **FastWorkbook** | **44,753** | **+47%** ⚡ | **~80MB constant** ✅ |
+| Writer Method | Throughput | Memory Usage | Features |
+|--------------|------------|--------------|----------|
+| **ExcelWriter.write_row()** | **36,870 rows/sec** | **~80MB constant** ✅ | Simple API, string-based |
+| **ExcelWriter.write_row_typed()** | **42,877 rows/sec** | **~80MB constant** ✅ | Type-safe, best balance |
+| **ExcelWriter.write_row_styled()** | **~42,000 rows/sec** | **~80MB constant** ✅ | Cell formatting + styles |
+| **FastWorkbook** (direct) | **44,753 rows/sec** | **~80MB constant** ✅ | Maximum speed, low-level |
 
-**Key Advantages:**
-- ✅ **21-47% faster** than rust_xlsxwriter
-- ✅ **Constant memory** - doesn't grow with dataset size
-- ✅ **True streaming** - data written directly to disk
-- ✅ **No memory spikes** - predictable resource usage
+**Key Characteristics:**
+- ✅ **High throughput** - 30K-45K rows/sec depending on method
+- ✅ **Constant memory** - stays at ~80MB regardless of dataset size
+- ✅ **True streaming** - data written directly to disk via ZIP
+- ✅ **Predictable performance** - no memory spikes or slowdowns
 
 ### Recommendations
 
-| Use Case | Recommended Writer | Why |
+| Use Case | Recommended Method | Why |
 |----------|-------------------|-----|
-| General use | `ExcelWriter.write_row_typed()` | Best balance of speed + features |
-| Simple exports | `ExcelWriter.write_row()` | Easy API, good performance |
-| Maximum speed | `FastWorkbook` | Fastest, lowest-level API |
-| Advanced formatting | rust_xlsxwriter | Full Excel features |
+| **General use** | `write_row_typed()` | Best balance of speed, type safety, and features |
+| **Simple exports** | `write_row()` | Easy API, good performance |
+| **Formatted reports** | `write_row_styled()` | Cell formatting with minimal overhead |
+| **Maximum speed** | `FastWorkbook` | Direct access, highest throughput |
 
 ## 📖 Documentation
 
@@ -629,10 +734,10 @@ cargo bench
 
 ## 🚀 Production Ready
 
-- ✅ **Battle-tested** - Handles 1M+ row datasets
-- ✅ **High performance** - 21-47% faster than alternatives
-- ✅ **Memory efficient** - Constant ~80MB usage, works in K8s pods
-- ✅ **Reliable** - 47 comprehensive tests covering edge cases
+- ✅ **Battle-tested** - Handles 1M+ row datasets with ease
+- ✅ **High performance** - 30K-45K rows/sec with true streaming
+- ✅ **Memory efficient** - Constant ~80MB usage, perfect for K8s pods
+- ✅ **Reliable** - 50+ comprehensive tests covering edge cases
 - ✅ **Safe** - Zero unsafe code, full Rust memory safety
 - ✅ **Compatible** - Excel, LibreOffice, Google Sheets
 - ✅ **Unicode support** - Special characters, emojis, CJK

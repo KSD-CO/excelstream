@@ -287,6 +287,74 @@ impl ExcelWriter {
         Ok(())
     }
 
+    /// Set column width for the current worksheet
+    ///
+    /// Width is in Excel units (default is 8.43).
+    /// One unit is approximately the width of one character in the default font.
+    ///
+    /// **IMPORTANT:** Must be called BEFORE writing any rows.
+    /// Column widths cannot be set after rows have been written.
+    ///
+    /// # Arguments
+    /// * `col` - Column index (0-based: 0=A, 1=B, 2=C, etc.)
+    /// * `width` - Column width in Excel units (typically 8-50)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use excelstream::writer::ExcelWriter;
+    ///
+    /// let mut writer = ExcelWriter::new("output.xlsx").unwrap();
+    ///
+    /// // Set column widths BEFORE writing rows
+    /// writer.set_column_width(0, 20.0).unwrap();  // Column A = 20 units wide
+    /// writer.set_column_width(1, 15.0).unwrap();  // Column B = 15 units wide
+    /// writer.set_column_width(2, 30.0).unwrap();  // Column C = 30 units wide
+    ///
+    /// // Now write rows
+    /// writer.write_header_bold(&["Name", "Age", "Email"]).unwrap();
+    /// writer.write_row(&["Alice", "30", "alice@example.com"]).unwrap();
+    /// writer.save().unwrap();
+    /// ```
+    pub fn set_column_width(&mut self, col: u32, width: f64) -> Result<()> {
+        self.inner.set_column_width(col, width)
+    }
+
+    /// Set height for the next row to be written
+    ///
+    /// Height is in points (1 point = 1/72 inch).
+    /// Default row height is 15 points.
+    ///
+    /// This setting is consumed by the next write_row call.
+    /// To set height for multiple rows, call this before each write_row.
+    ///
+    /// # Arguments
+    /// * `height` - Row height in points (typically 10-50)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use excelstream::writer::ExcelWriter;
+    ///
+    /// let mut writer = ExcelWriter::new("output.xlsx").unwrap();
+    ///
+    /// // Set height for header row
+    /// writer.set_next_row_height(25.0).unwrap();
+    /// writer.write_header_bold(&["Name", "Age", "Email"]).unwrap();
+    ///
+    /// // Regular row (default height)
+    /// writer.write_row(&["Alice", "30", "alice@example.com"]).unwrap();
+    ///
+    /// // Tall row
+    /// writer.set_next_row_height(40.0).unwrap();
+    /// writer.write_row(&["Bob", "25", "bob@example.com"]).unwrap();
+    ///
+    /// writer.save().unwrap();
+    /// ```
+    pub fn set_next_row_height(&mut self, height: f64) -> Result<()> {
+        self.inner.set_next_row_height(height)
+    }
+
     /// Set flush interval (rows between disk flushes)
     ///
     /// Default is 1000 rows. Lower values use less memory but slower.
@@ -309,15 +377,6 @@ impl ExcelWriter {
     /// Default is 1MB. This ensures memory usage stays bounded.
     pub fn set_max_buffer_size(&mut self, size: usize) {
         self.inner.set_max_buffer_size(size);
-    }
-
-    /// Set column width
-    ///
-    /// Note: Column width customization is not yet supported in streaming mode.
-    /// This is a no-op for compatibility. Will be added in future versions.
-    pub fn set_column_width(&mut self, _col: u16, _width: f64) -> Result<()> {
-        // TODO: Add column width support in FastWorkbook
-        Ok(())
     }
 
     /// Save and finalize the workbook

@@ -1,6 +1,6 @@
 [package]
 name = "excelstream"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 authors = ["Ton That Vu <ttvuhm@gmail.com>"]
 description = "High-performance streaming Excel library - Read/write large XLSX files with memory-efficient streaming"
@@ -35,7 +35,6 @@ chrono = { version = "0.4", optional = true }
 [dev-dependencies]
 tempfile = "3.8"
 criterion = "0.5"
-rust_xlsxwriter = "0.92"  # Only for comparison examples
 
 [features]
 default = []
