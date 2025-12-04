@@ -2,13 +2,13 @@
 
 use super::xml_writer::XmlWriter;
 use crate::error::Result;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::io::Write;
 
 /// Shared strings table that deduplicates strings across the workbook
 pub struct SharedStrings {
     strings: Vec<String>,
-    string_map: HashMap<String, u32>,
+    string_map: IndexMap<String, u32>,
     max_unique_strings: usize, // Giới hạn số string unique để tiết kiệm memory
 }
 
@@ -16,7 +16,7 @@ impl SharedStrings {
     pub fn new() -> Self {
         SharedStrings {
             strings: Vec::with_capacity(1000),
-            string_map: HashMap::with_capacity(1000),
+            string_map: IndexMap::with_capacity(1000),
             max_unique_strings: 100_000, // Giới hạn 100K unique strings
         }
     }
@@ -25,7 +25,7 @@ impl SharedStrings {
     pub fn with_capacity(capacity: usize, max_unique: usize) -> Self {
         SharedStrings {
             strings: Vec::with_capacity(capacity),
-            string_map: HashMap::with_capacity(capacity),
+            string_map: IndexMap::with_capacity(capacity),
             max_unique_strings: max_unique,
         }
     }
@@ -84,7 +84,6 @@ impl SharedStrings {
         }
 
         writer.end_element("sst")?;
-        writer.flush()?;
         Ok(())
     }
 }

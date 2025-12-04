@@ -86,19 +86,31 @@ impl<W: Write> XmlWriter<W> {
     /// Write text content with XML escaping
     #[inline]
     pub fn write_escaped(&mut self, text: &str) -> Result<()> {
-        for byte in text.bytes() {
-            match byte {
-                b'&' => self.write_raw(b"&amp;")?,
-                b'<' => self.write_raw(b"&lt;")?,
-                b'>' => self.write_raw(b"&gt;")?,
-                b'"' => self.write_raw(b"&quot;")?,
-                b'\'' => self.write_raw(b"&apos;")?,
-                _ => self.buffer.push(byte),
+        // Iterate over Unicode scalar values to avoid splitting UTF-8 sequences.
+        for ch in text.chars() {
+            match ch {
+                '&' => self.write_raw(b"&amp;")?,
+                '<' => self.write_raw(b"&lt;")?,
+                '>' => self.write_raw(b"&gt;")?,
+                '"' => self.write_raw(b"&quot;")?,
+                '\'' => self.write_raw(b"&apos;")?,
+                // Allowed XML whitespace characters: tab (U+0009), LF (U+000A), CR (U+000D)
+                c if (c as u32) < 0x20 && c != '\t' && c != '\n' && c != '\r' => {
+                    // Drop illegal control characters (they would break XML parsers on Windows)
+                    continue;
+                }
+                c => {
+                    // Write UTF-8 bytes of the character
+                    let mut buf = [0u8; 4];
+                    let s = c.encode_utf8(&mut buf);
+                    self.buffer.extend_from_slice(s.as_bytes());
+                }
+            }
+            if self.buffer.len() > 4096 {
+                self.flush()?;
             }
         }
-        if self.buffer.len() > 4096 {
-            self.flush()?;
-        }
+
         Ok(())
     }
 

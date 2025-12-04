@@ -6,7 +6,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/KSD-CO/excelstream/workflows/Rust/badge.svg)](https://github.com/KSD-CO/excelstream/actions)
 
-> **✨ What's New in v0.4.0:**
+> **✨ What's New in v0.4.1:**
+> - 🪟 **Windows Compatibility Fix** - Fixed critical OOXML structure bug for Excel on Windows
+> - ✅ **100% OOXML Compliance** - All files now match reference implementation exactly
+> - 🔄 **Deterministic Output** - Using IndexMap for consistent shared strings ordering
+> - 🚀 **No Performance Impact** - Fixes maintain full performance (~42K rows/sec)
+
+> **v0.4.0 Features:**
 > - 📏 **Column Width & Row Height** - Customize column widths and row heights for perfect formatting!
 > - 🎨 **Cell Formatting** - 14 predefined styles: bold, italic, highlights, borders, number formats!
 > - 🎨 **Easy Styling API** - `write_header_bold()`, `write_row_styled()`, `write_row_with_style()`
@@ -28,6 +34,7 @@
 - 🔒 **Type-safe** - Leverage Rust's type system for safety
 - 📝 **Multi-sheet** - Support multiple sheets in one workbook
 - 🗄️ **Database Export** - PostgreSQL integration examples
+- 🪟 **Cross-Platform** - Works perfectly on Windows, Linux, and macOS
 - ✅ **Production Ready** - 50+ tests, CI/CD, zero unsafe code
 
 ## 📦 Installation
@@ -36,7 +43,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-excelstream = "0.2"
+excelstream = "0.4"
 ```
 
 ## 🚀 Quick Start

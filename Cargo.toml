@@ -1,6 +1,6 @@
 [package]
 name = "excelstream"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 authors = ["Ton That Vu <ttvuhm@gmail.com>"]
 description = "High-performance streaming Excel library - Read/write large XLSX files with memory-efficient streaming"
@@ -24,7 +24,9 @@ calamine = "0.32"
 thiserror = "2.0"
 serde = { version = "1.0", features = ["derive"], optional = true }
 rayon = { version = "1.8", optional = true }
-zip = { version = "0.6", default-features = false, features = ["deflate"] }
+zip = "0.6"
+tempfile = "3.8"
+indexmap = "2"
 # PostgreSQL dependencies (optional, only for examples)
 postgres = { version = "0.19", features = ["with-chrono-0_4"], optional = true }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"], optional = true }
