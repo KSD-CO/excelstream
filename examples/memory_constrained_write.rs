@@ -120,48 +120,80 @@ fn write_data(
         "THÔNG TIN LỖI",
     ])?;
 
+    // Pre-allocate reusable buffers to avoid per-cell allocation
+    let mut mau_so = String::with_capacity(16);
+    let mut so_hd = String::with_capacity(16);
+    let mut ma_cqt = String::with_capacity(40);
+    let mut ma_bi_mat = String::with_capacity(20);
+    let mut ma_dh = String::with_capacity(16);
+    let mut ngay_ct = String::with_capacity(32);
+    let mut tong_tien = String::with_capacity(16);
+    let mut vat = String::with_capacity(16);
+    let mut thanh_toan = String::with_capacity(16);
+
+    // Static strings (no allocation per row)
+    const KHO: &str = "Central Hub Dĩ An";
+    const NGAY_HD: &str = "29-11-2025";
+    const KY_HIEU: &str = "C25TSF";
+    const TRANG_THAI: &str = "CQT đã duyệt";
+    const MA_THUE: &str = "";
+    const TEN_KH: &str = "Khách hàng không cung cấp thông tin";
+    const DIA_CHI: &str = "Khách hàng không cung cấp thông tin";
+    const EMAIL: &str = "";
+    const NGAY_KY: &str = "29-11-2025 18:35";
+    const LOI: &str = "";
+
     // Write data rows
     for i in 1..=num_rows {
-        let kho = "Central Hub Dĩ An".to_string();
-        let ngay_hd = "29-11-2025".to_string();
-        let mau_so = format!("{}", i % 10);
-        let ky_hieu = "C25TSF".to_string();
-        let so_hd = format!("{:08}", 260000 + i);
-        let trang_thai = "CQT đã duyệt".to_string();
-        let ma_thue = String::new();
-        let ten_kh = "Khách hàng không cung cấp thông tin".to_string();
-        let dia_chi = "Khách hàng không cung cấp thông tin".to_string();
-        let email = String::new();
-        let ma_cqt = format!("{:032X}", i);
-        let ma_bi_mat = format!("key{:08x}", i);
-        let ngay_ky = "29-11-2025 18:35".to_string();
-        let ma_dh = format!("841495{:04}", i % 10000);
-        let ngay_ct = format!("29-11-2025 18:35:{:02}", i % 60);
-        let tong_tien = format!("{}.00", 100000 + (i % 500000));
-        let vat = format!("{}.00", 5000 + (i % 50000));
-        let thanh_toan = format!("{}.00", 105000 + (i % 550000));
-        let loi = String::new();
+        // Reuse buffers - clear and write
+        mau_so.clear();
+        use std::fmt::Write;
+        write!(&mut mau_so, "{}", i % 10).unwrap();
+
+        so_hd.clear();
+        write!(&mut so_hd, "{:08}", 260000 + i).unwrap();
+
+        ma_cqt.clear();
+        write!(&mut ma_cqt, "{:032X}", i).unwrap();
+
+        ma_bi_mat.clear();
+        write!(&mut ma_bi_mat, "key{:08x}", i).unwrap();
+
+        ma_dh.clear();
+        write!(&mut ma_dh, "841495{:04}", i % 10000).unwrap();
+
+        ngay_ct.clear();
+        write!(&mut ngay_ct, "29-11-2025 18:35:{:02}", i % 60).unwrap();
+
+        tong_tien.clear();
+        write!(&mut tong_tien, "{}.00", 100000 + (i % 500000)).unwrap();
+
+        vat.clear();
+        write!(&mut vat, "{}.00", 5000 + (i % 50000)).unwrap();
+
+        thanh_toan.clear();
+        write!(&mut thanh_toan, "{}.00", 105000 + (i % 550000)).unwrap();
 
         workbook.write_row(&[
-            &kho,
-            &ngay_hd,
+            KHO,
+            NGAY_HD,
             &mau_so,
-            &ky_hieu,
+            KY_HIEU,
             &so_hd,
-            &trang_thai,
-            &ma_thue,
-            &ten_kh,
-            &dia_chi,
-            &email,
+            TRANG_THAI,
+            MA_THUE,
+            TEN_KH,
+            DIA_CHI,
+            EMAIL,
             &ma_cqt,
             &ma_bi_mat,
-            &ngay_ky,
+            NGAY_KY,
             &ma_dh,
             &ngay_ct,
             &tong_tien,
             &vat,
             &thanh_toan,
-            &loi,
+            LOI,
         ])?;
 
         // In progress every 100K rows

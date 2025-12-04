@@ -1,6 +1,6 @@
 [package]
 name = "excelstream"
-version = "0.4.5"
+version = "0.5.0"
 edition = "2021"
 authors = ["Ton That Vu <ttvuhm@gmail.com>"]
 description = "High-performance streaming Excel library - Read/write large XLSX files with memory-efficient streaming"
@@ -28,6 +28,9 @@ zip = "0.6"
 tempfile = "3.8"
 indexmap = "2"
 chrono = { version = "0.4", features = ["clock"] }
+itoa = "1.0"
+lru = "0.12"
+sled = "0.34"
 # PostgreSQL dependencies (optional, only for examples)
 postgres = { version = "0.19", features = ["with-chrono-0_4"], optional = true }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"], optional = true }

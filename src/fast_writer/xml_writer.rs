@@ -7,24 +7,36 @@ use std::io::Write;
 pub struct XmlWriter<W: Write> {
     writer: W,
     buffer: Vec<u8>,
+    flush_threshold: usize,
 }
 
 impl<W: Write> XmlWriter<W> {
     pub fn new(writer: W) -> Self {
+        Self::with_capacity(writer, 8192)
+    }
+
+    pub fn with_capacity(writer: W, capacity: usize) -> Self {
         XmlWriter {
             writer,
-            buffer: Vec::with_capacity(8192), // 8KB buffer
+            buffer: Vec::with_capacity(capacity),
+            flush_threshold: capacity / 2, // Flush at 50% capacity
         }
+    }
+
+    /// Auto-flush if buffer exceeds threshold
+    #[inline]
+    fn auto_flush(&mut self) -> Result<()> {
+        if self.buffer.len() >= self.flush_threshold {
+            self.flush()?;
+        }
+        Ok(())
     }
 
     /// Write raw bytes directly
     #[inline]
     pub fn write_raw(&mut self, data: &[u8]) -> Result<()> {
         self.buffer.extend_from_slice(data);
-        if self.buffer.len() > 4096 {
-            self.flush()?;
-        }
-        Ok(())
+        self.auto_flush()
     }
 
     /// Write string data
@@ -106,12 +118,9 @@ impl<W: Write> XmlWriter<W> {
                     self.buffer.extend_from_slice(s.as_bytes());
                 }
             }
-            if self.buffer.len() > 4096 {
-                self.flush()?;
-            }
         }
 
-        Ok(())
+        self.auto_flush()
     }
 
     /// Flush buffer to underlying writer
