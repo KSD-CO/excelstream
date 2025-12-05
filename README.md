@@ -9,7 +9,6 @@
 > **✨ What's New in v0.6.0:**
 > - 🎨 **Cell Formatting Fixed** - Complete styles.xml implementation with all 14 cell styles working
 > - 🔧 **Unified Architecture** - Removed legacy FastWorkbook, simplified to single UltraLowMemoryWorkbook implementation
-> - 🔒 **Security Improvements** - Removed hardcoded credentials, added .env.example for safe configuration
 > - 📚 **Improved Examples** - Updated all examples to use consistent ExcelWriter API
 > - 🎯 **Style Support** - All formatting now works: bold, italic, colors, number formats, borders
 
