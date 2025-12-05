@@ -286,7 +286,7 @@ impl UltraLowMemoryWorkbook {
         write!(writer, "</row>")?;
 
         // Flush periodically (every 1000 rows)
-        if self.current_row % 1000 == 0 {
+        if self.current_row.is_multiple_of(1000) {
             writer.flush()?;
         }
 
