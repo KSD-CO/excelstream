@@ -1,406 +1,180 @@
-# excelstream Examples
+# ExcelStream Examples
 
 Clean, organized examples demonstrating the excelstream library's capabilities.
 
+## 📚 Quick Start (Beginners)
 
-## 📚 Quick Start Examples
+### 1. Basic Operations
 
-### 1. basic_read.rs
-
-Read a basic Excel file and display its contents.
-
+**basic_write.rs** - Write a basic Excel file with headers and data
 ```bash
-cargo run --example basic_read
-```
-
-### 2. basic_write.rs
-
-Write a basic Excel file with header and data rows.
-
-cargo run --example basic_read
-
-``````bash
-
 cargo run --example basic_write
-
-### 3. streaming_write.rs```
-
-Write large Excel files (10,000 rows) efficiently.
-
-```bash### 3. streaming_read.rs
-
-cargo run --example streaming_writeRead large Excel files with streaming for memory optimization.
-
 ```
 
+**basic_read.rs** - Read an Excel file and display contents
 ```bash
-
-### 4. streaming_read.rs# Create large file first
-
-Read large Excel files with minimal memory usage.cargo run --example streaming_write
-
-```bash# Then read it
-
-cargo run --example streaming_readcargo run --example streaming_read
-
-``````
-
-
-
-## 🚀 Advanced Features### 4. streaming_write.rs
-
-Write large Excel files (10,000 rows) with streaming.
-
-### 5. multi_sheet.rs
-
-Create workbooks with multiple sheets.```bash
-
-```bashcargo run --example streaming_write
-
-cargo run --example multi_sheet```
-
+cargo run --example basic_read
 ```
 
-## Performance Comparison Examples
+### 2. Streaming for Large Files
 
-### 6. cell_formatting.rs
-
-Apply various cell styles and formatting options.### 5. three_writers_comparison.rs ⭐ **RECOMMENDED**
-
-```bashComprehensive comparison of all 3 writer types with 1 million rows × 30 columns:
-
-cargo run --example cell_formatting- `ExcelWriter.write_row()` - String-based writing (baseline)
-
-```- `ExcelWriter.write_row_typed()` - Typed value writing (1-5% faster, Excel formulas work)
-
-- `FastWorkbook` - Custom fast writer (25-44% faster for large datasets)
-
-### 7. column_width_row_height.rs
-
-Customize column widths and row heights.```bash
-
-```bash# Run full comparison (1M rows, takes ~90 seconds)
-
-cargo run --example column_width_row_heightcargo run --release --example three_writers_comparison
-
-```
-
-# Results show:
-
-### 8. csv_to_excel.rs# - write_row(): 31.08s (32,177 rows/s)
-
-Convert CSV files to Excel format with streaming.# - write_row_typed(): 30.63s (32,649 rows/s) +1% faster
-
-```bash# - FastWorkbook: 24.80s (40,329 rows/s) +25% faster
-
-cargo run --example csv_to_excel```
-
-```
-
-**This example demonstrates:**
-
-## ⚡ Performance & Comparison- Real-world mixed data types (strings, integers, floats, booleans)
-
-- Performance at scale (1M rows)
-
-### 9. writers_comparison.rs ⭐ **RECOMMENDED**- Memory efficiency
-
-Comprehensive comparison of 4 writer methods with 100K-1M rows:- Feature comparison matrix
-
-
-
-**Writer Methods Compared:**### 6. write_row_comparison.rs
-
-1. `write_row()` - String-based (baseline)Demonstrates the difference between string-based and typed value writing.
-
-2. `write_row_typed()` - Typed values (Excel formulas work)Creates 3 Excel files to show:
-
-3. `write_row_styled()` - With conditional formatting (FASTEST! +15%)- String-based: All values stored as text (formulas don't work)
-
-4. `FastWorkbook` - Direct low-level API- Typed: Numbers stored as numbers (formulas work correctly)
-
-- Financial report example with proper types
-
+**streaming_write.rs** - Write 10,000+ rows efficiently
 ```bash
+cargo run --example streaming_write
+```
 
-# Quick test (100K rows, ~7 seconds)```bash
+**streaming_read.rs** - Read large files with constant memory
+```bash
+# Create large file first
+cargo run --example streaming_write
+# Then read it
+cargo run --example streaming_read
+```
 
-cargo run --release --example writers_comparisoncargo run --example write_row_comparison
+### 3. Features
 
+**cell_formatting.rs** - Apply cell styles (bold, colors, borders, number formats)
+```bash
+cargo run --example cell_formatting
+```
 
+**column_width_row_height.rs** - Customize column widths and row heights
+```bash
+cargo run --example column_width_row_height
+```
 
-# Full test (1M rows, ~90 seconds) - Uncomment in code# Creates 3 files:
+**worksheet_protection.rs** - Protect sheets with passwords and permissions
+```bash
+cargo run --example worksheet_protection
+```
 
-# Results with 1M rows × 30 columns:# - examples/string_output.xlsx
+**multi_sheet.rs** - Create workbooks with multiple sheets
+```bash
+cargo run --example multi_sheet
+```
 
-# - write_row():        22.58s (44,293 rows/s)# - examples/typed_output.xlsx
+**csv_to_excel.rs** - Convert CSV files to Excel
+```bash
+cargo run --example csv_to_excel
+```
 
-# - write_row_typed():  21.77s (45,931 rows/s) +4% faster# - examples/financial_report.xlsx
+## ⚡ Performance Testing
 
-# - write_row_styled(): 19.51s (51,266 rows/s) +15% faster ⚡```
+**writers_comparison.rs** ⭐ **RECOMMENDED** - Compare all writer methods
+```bash
+# 1M rows × 30 columns (takes ~90 seconds)
+cargo run --release --example writers_comparison
 
-# - FastWorkbook:       20.62s (48,497 rows/s) +9% faster
+# Results (v0.7.0):
+# write_row():        18,307 rows/s (baseline)
+# write_row_typed():  19,722 rows/s (+8%)
+# write_row_styled(): 19,474 rows/s (+6%)
+# UltraLowMemory:     24,451 rows/s (+34%) ⚡
+```
 
-```### 7. writer_comparison.rs
+**compression_level_config.rs** - Test different compression levels (0-9)
+```bash
+cargo run --release --example compression_level_config
+```
 
-Compare standard ExcelWriter vs FastWorkbook performance with different dataset sizes.
+## 💾 Memory Management
 
-**Key Insights:**
-
-- `write_row_styled()` is fastest because it avoids intermediate string conversions```bash
-
-- All methods use FastWorkbook internallycargo run --release --example writer_comparison
-
-- Memory usage is constant (streaming architecture)```
-
-
-
-## 💾 Memory Management### 8. fast_writer_test.rs
-
-Fast writer performance benchmarks with 1 million rows.
-
-### 10. memory_constrained_write.rs
-
-Optimize for memory-limited environments (Kubernetes, containers).```bash
-
-```bashcargo run --release --example fast_writer_test
-
-# Simulate 512MB memory limit```
-
+**memory_constrained_write.rs** - Optimize for K8s/containers (<512 MB RAM)
+```bash
+# Simulate 512 MB memory limit
 MEMORY_LIMIT_MB=512 cargo run --release --example memory_constrained_write
-
-```## Advanced Features
-
-
-
-### 11. auto_memory_config.rs### 9. csv_to_excel.rs
-
-Automatic memory configuration based on environment.Convert CSV files to Excel format.
-
-```bash
-
-# With memory limit```bash
-
-MEMORY_LIMIT_MB=256 cargo run --release --example auto_memory_configcargo run --example csv_to_excel
-
 ```
+
+**auto_memory_config.rs** - Automatic memory configuration
+```bash
+# With memory limit
+MEMORY_LIMIT_MB=256 cargo run --release --example auto_memory_config
 
 # Auto-detect
+cargo run --release --example auto_memory_config
+```
 
-cargo run --release --example auto_memory_config### 10. multi_sheet.rs
+**large_dataset_multi_sheet.rs** - Handle 10M+ rows (auto-split at 1M rows/sheet)
+```bash
+# 10M rows (takes 3-5 minutes)
+cargo run --release --example large_dataset_multi_sheet
 
-```Create Excel workbooks with multiple sheets.
-
-
-
-## 📊 Large Datasets```bash
-
-cargo run --example multi_sheet
-
-### 12. large_dataset_multi_sheet.rs```
-
-Handle datasets exceeding Excel's 1,048,576 row/sheet limit.
-
-Automatically splits data across multiple sheets.### 11. memory_constrained_write.rs
-
-Test memory-constrained writing with different flush intervals.
-
-```bashIdeal for Kubernetes pods with limited memory.
-
-# Test with 10 million rows (takes ~3-5 minutes)
-
-cargo run --release --example large_dataset_multi_sheet```bash
-
-cargo run --release --example memory_constrained_write
-
-# Results:```
-
+# Results:
 # - 10 sheets created (1M rows each)
-
-# - ~62,000 rows/sec sustained throughput### 12. auto_memory_config.rs
-
-# - ~1.7 GB output fileDemonstrates automatic memory configuration based on environment variables.
-
+# - ~62,000 rows/s sustained
+# - ~1.7 GB output file
 # - Constant memory usage
+```
 
-``````bash
+## 🐘 PostgreSQL Integration
 
-# Auto-detect memory limit
-
-**Features:**MEMORY_LIMIT_MB=512 cargo run --release --example auto_memory_config
-
-- Automatic sheet splitting at 1M rows
-
-- Progress reporting every 100K rows# Default behavior (no limit)
-
-- ZIP64 support for large files (>4GB)cargo run --release --example auto_memory_config
-
-- Excel hard limit safe (1,048,576 rows/sheet)```
-
-
-
-## 🐘 PostgreSQL Integration## PostgreSQL Integration Examples
-
-
-
-Export data from PostgreSQL to Excel (basic synchronous version).
-
-### 13. postgres_streaming.rs
-
-Memory-efficient streaming export from PostgreSQL.```bash
-
-```bash# Setup database first
-
-# Setup database./setup_postgres_test.sh
-
-./setup_postgres_test.sh# or
-
+**Setup database first:**
+```bash
+./setup_postgres_test.sh
+# or
 psql -U postgres -f setup_test_db.sql
-
-# Run export
-
-export DATABASE_URL="postgresql://rustfire:password@localhost/rustfire"# Run example
-
-cargo run --example postgres_streaming --features postgresexport DATABASE_URL="postgresql://rustfire:password@localhost/rustfire"
-
-```cargo run --example postgres_to_excel --features postgres
-
 ```
 
-### 14. postgres_to_excel_advanced.rs
+**postgres_streaming.rs** - Stream from PostgreSQL (production-tested 430K+ rows)
+```bash
+export DATABASE_URL="postgresql://rustfire:password@localhost/rustfire"
+cargo run --example postgres_streaming --features postgres
+```
 
-Async export with connection pooling and optimizations.### 14. postgres_streaming.rs
-
-```bashMemory-efficient streaming export from PostgreSQL for very large datasets.
-
+**postgres_to_excel_advanced.rs** - Async with connection pooling
+```bash
 export DB_HOST=localhost
-
-export DB_USER=rustfire```bash
-
-export DB_PASSWORD=passwordexport DATABASE_URL="postgresql://rustfire:password@localhost/rustfire"
-
-export DB_NAME=rustfirecargo run --example postgres_streaming --features postgres
-
-```
+export DB_PORT=5432
+export DB_USER=rustfire
+export DB_PASSWORD=password
+export DB_NAME=rustfire
 
 cargo run --example postgres_to_excel_advanced --features postgres-async
+```
 
-```### 15. postgres_to_excel_advanced.rs
+**verify_postgres_export.rs** - Quick verification tool
+```bash
+cargo run --example verify_postgres_export
+```
 
-Advanced async PostgreSQL export with connection pooling and multiple sheets.
+See [POSTGRES_EXAMPLES.md](POSTGRES_EXAMPLES.md) for detailed PostgreSQL documentation.
 
-### 15. verify_postgres_export.rs
+## 📖 Recommended Learning Path
 
-Quick verification tool for PostgreSQL exports.```bash
-
-```bashexport DB_HOST=localhost
-
-cargo run --example verify_postgres_exportexport DB_PORT=5432
-
-```export DB_USER=rustfire
-
-export DB_PASSWORD=password
-
-## 📖 Recommended Learning Pathexport DB_NAME=rustfire
-
-
-
-**For Beginners:**cargo run --example postgres_to_excel_advanced --features postgres-async
-
-1. `basic_write.rs` → `basic_read.rs` - Understand the basics```
-
-2. `streaming_write.rs` → `streaming_read.rs` - Larger datasets
-
-3. `cell_formatting.rs` - Add stylingSee [POSTGRES_EXAMPLES.md](POSTGRES_EXAMPLES.md) for detailed PostgreSQL examples documentation.
-
+### For Beginners:
+1. `basic_write.rs` + `basic_read.rs` - Understand basics
+2. `streaming_write.rs` + `streaming_read.rs` - Large files
+3. `cell_formatting.rs` - Styling
 4. `multi_sheet.rs` - Multiple sheets
 
-## Performance Testing Examples
+### For Performance:
+1. `writers_comparison.rs` - See all methods side-by-side ⭐
+2. `large_dataset_multi_sheet.rs` - Push the limits (10M rows)
+3. `memory_constrained_write.rs` - Production deployments
 
-**For Performance:**
-
-1. `writers_comparison.rs` - See all methods side-by-sideAll performance examples should be run in release mode for accurate results:
-
-2. `large_dataset_multi_sheet.rs` - Push the limits
-
-3. `memory_constrained_write.rs` - Production deployments```bash
-
-# Full writer comparison (recommended)
-
-**For Production:**cargo run --release --example three_writers_comparison
-
+### For Production:
 1. `postgres_streaming.rs` - Database integration
+2. `memory_constrained_write.rs` - Container environments (K8s)
+3. `compression_level_config.rs` - Optimize speed vs file size
 
-2. `memory_constrained_write.rs` - Container environments# Specific comparisons
+## 📝 Output Files
 
-3. `large_dataset_multi_sheet.rs` - Large exportscargo run --release --example write_row_comparison
+Examples create output files in this directory:
+- `output.xlsx` - From basic_write
+- `large_output.xlsx` - From streaming_write
+- `test_*.xlsx` - From performance tests
+- `postgres_export.xlsx` - From PostgreSQL exports
 
-cargo run --release --example writer_comparison
+## 🔧 Performance Tips
 
-## 📝 Output Filescargo run --release --example fast_writer_test
+**Always use `--release` mode for performance testing:**
+```bash
+cargo run --release --example writers_comparison
+```
 
-
-
-Examples create output files in the `examples/` directory:# Memory testing
-
-- `output.xlsx` - Basic write outputcargo run --release --example memory_constrained_write
-
-- `large_output.xlsx` - Streaming write output```
-
-- `comparison_*.xlsx` - Writer comparison outputs
-
-- `test_10m_multi_sheet.xlsx` - Large dataset multi-sheet output## Output Files
-
-- `postgres_export*.xlsx` - PostgreSQL export outputs
-
-Examples will create output files in this directory:
-
-## 🔧 Performance Tips- `output.xlsx` - From basic_write
-
-- `large_output.xlsx` - Large file from streaming_write
-
-**Always use `--release` mode for performance testing:**- `converted.xlsx` - Converted file from CSV
-
-```bash- `multi_sheet.xlsx` - Multi-sheet file
-
-cargo run --release --example writers_comparison- `string_output.xlsx` - String-based writing example
-
-```- `typed_output.xlsx` - Typed value writing example
-
-- `financial_report.xlsx` - Financial report with proper types
-
-**Key Performance Factors:**- `comparison_*.xlsx` - Files from performance comparisons
-
-- `write_row_styled()` is fastest (+15% over baseline)- `memory_test_*.xlsx` - Files from memory testing
-
-- FastWorkbook provides true streaming (constant memory)- `postgres_export.xlsx` - PostgreSQL export results
-
-- ZIP64 automatically enabled for large files
-
-- Typical throughput: 40K-60K rows/sec with 30 columns## Sample Data
-
-
-
-## 🗑️ Removed Examples- `data.csv` - Sample CSV file for conversion testing
-
-- `sample.xlsx` - Sample Excel file (created by basic_write)
-
-The following redundant examples were removed in cleanup:
-
-- `write_row_comparison.rs` - Merged into `writers_comparison.rs`## Recommended Learning Path
-
-- `debug_write_row_fast.rs` - Debug file, not needed
-
-- `fast_writer_test.rs` - Covered by `writers_comparison.rs`1. Start with **basic_write.rs** and **basic_read.rs** to understand the basics
-
-- `fast_writer_validation.rs` - Not necessary2. Try **streaming_write.rs** and **streaming_read.rs** for larger datasets
-
-- `memory_usage_test.rs` - Covered by `memory_constrained_write.rs`3. Run **three_writers_comparison.rs** to see performance differences
-
-- `performance_optimized.rs` - Covered by `writers_comparison.rs`4. Explore **write_row_comparison.rs** to understand typed vs string writing
-
-- `performance_test_with_sizing.rs` - Covered by `writers_comparison.rs`5. Test **memory_constrained_write.rs** if deploying to Kubernetes
-
-6. Check PostgreSQL examples if integrating with databases
-
-All functionality from removed examples is preserved in the remaining, better-organized examples.
+**Key insights (v0.7.0):**
+- All methods use constant ~80 MB memory (streaming architecture)
+- `UltraLowMemoryWorkbook` is fastest: 24K rows/s (+34%)
+- `write_row_typed()` is 8% faster than string-based
+- Typical throughput: 18K-25K rows/s with 30 columns
+- Compression level 1 = 2x faster (dev), level 6 = smallest (prod)

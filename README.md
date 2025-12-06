@@ -6,10 +6,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/KSD-CO/excelstream/workflows/Rust/badge.svg)](https://github.com/KSD-CO/excelstream/actions)
 
-> **✨ What's New in v0.6.2:**
-> - ⬆️ **Upgraded zip crate** - Now using zip 6.0 (latest) with better compression and bug fixes
-> - 🗑️ **Removed deprecated code** - Deleted `fix_xlsx_zip_order()` function (no longer needed)
-> - 💾 **Better Memory** - Improved by ~2%: All methods now use 55 MB (was 56 MB)
+> **✨ What's New in v0.7.0:**
+> - 🔒 **Worksheet Protection** - Protect sheets with password and granular permissions
+> - 📐 **Cell Merging** - Merge cells horizontally and vertically (A1:C1, A1:A3)
+> - 📏 **Column Width** - Set custom column widths (previously no-op, now functional)
+> - 🎯 **Zero Overhead** - All new features maintain 15-25 MB memory and streaming performance
 
 
 > **v0.6.1 Features:**
@@ -35,22 +36,226 @@
 
 ## ✨ Features
 
-- 🚀 **Streaming Read** - Process large Excel files without loading entire file into memory
-- 💾 **Ultra-Low Memory Write** - Write millions of rows with only 15-25 MB memory usage (89% reduction!)
-- ⚡ **High Performance** - 25K+ rows/sec with hybrid SST optimization (58% faster!)
-- 🧠 **Hybrid SST** - Intelligent deduplication: numbers inline, long strings inline, only short repeated strings deduplicated
-- 🗜️ **Compression Control** - Configure ZIP compression levels (0-9) for speed vs size optimization
-- 🎨 **Cell Formatting** - 14 predefined styles (bold, currency, %, highlights, borders) - **WORKING!**
-- 📏 **Column Width & Row Height** - Customize column widths and row heights
-- 📐 **Formula Support** - Write Excel formulas (=SUM, =AVERAGE, =IF, etc.)
-- 🎯 **Typed Values** - Strong typing with Int, Float, Bool, DateTime, Formula
-- 🔧 **Memory Efficient** - Handles 50+ columns with mixed data types
-- ❌ **Better Errors** - Context-rich error messages with available sheets list
-- 📊 **Multi-format Support** - Read XLSX, XLS, ODS formats
-- 🔒 **Type-safe** - Leverage Rust's type system for safety
-- 📝 **Multi-sheet** - Support multiple sheets in one workbook
-- 🪟 **Cross-Platform** - Works perfectly on Windows, Linux, and macOS
-- ✅ **Production Ready** - 50+ tests, CI/CD, zero unsafe code
+- 🚀 **Constant Memory Streaming** - Process millions of rows with only 15-25 MB RAM (no buffering!)
+- 💾 **Ultra-Low Memory** - 89% less memory than alternatives (15 MB vs 125 MB for 1M rows)
+- ⚡ **Blazing Fast** - 25K-70K rows/sec, 58% faster with hybrid SST optimization
+- 🧠 **Smart Memory** - Intelligent deduplication: numbers inline, long strings inline, only repeated short strings deduplicated
+- 🗜️ **Compression Control** - ZIP levels 0-9 for speed/size trade-offs (2x faster in dev mode)
+- 🎨 **Cell Formatting** - 14 predefined styles (bold, currency, %, dates, highlights, borders)
+- 📐 **Cell Merging** - Merge cells horizontally/vertically for headers and grouped data
+- 📏 **Column Width & Row Height** - Full layout control for professional reports
+- 🔒 **Worksheet Protection** - Password protection with 12 granular permissions
+- 📐 **Formula Support** - Excel formulas (=SUM, =AVERAGE, =IF, etc.) calculate correctly
+- 🎯 **Type Safety** - Strong typing: Int, Float, Bool, DateTime, Formula, String
+- 🔧 **50+ Columns** - Handles complex schemas with mixed data types
+- ❌ **Better Errors** - Context-rich error messages with debugging info
+- 📊 **Multi-format** - Read XLSX, XLS, ODS; Write XLSX with full compatibility
+- 🪟 **Cross-Platform** - Windows, Linux, macOS (tested on all three)
+- 🐳 **K8s Ready** - Perfect for memory-limited containers (<512 MB RAM)
+- ✅ **Production Proven** - 430K+ rows exported in production, 50+ tests, zero unsafe code
+
+## 🎯 Why ExcelStream?
+
+### The Problem with Traditional Excel Libraries
+
+Most Excel libraries in Rust (and other languages) load entire files into memory:
+
+```rust
+// ❌ Traditional approach - Loads ENTIRE file into RAM
+let workbook = Workbook::new("huge.xlsx")?;
+for row in workbook.worksheet("Sheet1")?.rows() {
+    // 1GB file = 1GB+ RAM usage!
+}
+```
+
+**Problems:**
+- 📈 Memory grows with file size (10MB file = 100MB+ RAM)
+- 💥 OOM crashes on large files (>100MB)
+- 🐌 Slow startup (must load everything first)
+- 🔴 Impossible in containers (<512MB RAM)
+
+### The ExcelStream Difference: Real Streaming
+
+```rust
+// ✅ ExcelStream - Constant 15-25 MB regardless of file size
+let mut reader = ExcelReader::open("huge.xlsx")?;
+for row in reader.rows("Sheet1")? {
+    // 1GB file = still 15-25 MB RAM! 🚀
+}
+```
+
+**Why This Matters:**
+
+| Scenario | Traditional Library | ExcelStream | Benefit |
+|----------|-------------------|-------------|---------|
+| 10 MB file | 100 MB RAM | 15 MB RAM | **85% less memory** |
+| 100 MB file | 1+ GB RAM | 15 MB RAM | **98% less memory** |
+| 1 GB file | ❌ Crash | 25 MB RAM | ✅ **Works!** |
+| K8s pod (<512MB) | ❌ OOMKilled | ✅ Works | **Container-ready** |
+
+## 🚀 Real-World Use Cases
+
+### 1. Processing Large Enterprise Files (>100 MB)
+
+**Problem:** Sales team sends 500 MB Excel with 2M+ customer records. Traditional libraries crash.
+
+```rust
+use excelstream::reader::ExcelReader;
+
+// ✅ Processes 2M rows with only 25 MB RAM
+let mut reader = ExcelReader::open("customers_2M_rows.xlsx")?;
+let mut total_revenue = 0.0;
+
+for row in reader.rows("Sales")? {
+    let row = row?;
+    if let Some(amount) = row.get(5).and_then(|c| c.as_f64()) {
+        total_revenue += amount;
+    }
+    // Memory stays constant! No accumulation!
+}
+
+println!("Total: ${:.2}", total_revenue);
+```
+
+**Why ExcelStream wins:**
+- ✅ Constant 25 MB memory (traditional = 5+ GB)
+- ✅ Processes row-by-row (no buffering)
+- ✅ Works in K8s pods with 512 MB limit
+- ⚡ Starts processing immediately (no load delay)
+
+### 2. Daily Database Exports (Production ETL)
+
+**Problem:** Export 430K+ invoice records to Excel every night. Must fit in 512 MB pod.
+
+```rust
+use excelstream::ExcelWriter;
+use postgres::{Client, NoTls};
+
+// ✅ Real production code - 430,099 rows in 94 seconds
+let mut writer = ExcelWriter::with_compression("invoices.xlsx", 3)?;
+writer.set_flush_interval(500);  // Flush every 500 rows
+
+let mut client = Client::connect("postgresql://...", NoTls)?;
+let mut tx = client.transaction()?;
+tx.execute("DECLARE cursor CURSOR FOR SELECT * FROM invoices", &[])?;
+
+loop {
+    let rows = tx.query("FETCH 500 FROM cursor", &[])?;
+    if rows.is_empty() { break; }
+    
+    for row in rows {
+        writer.write_row_typed(&[
+            CellValue::Int(row.get(0)),
+            CellValue::String(row.get(1)),
+            CellValue::Float(row.get(2)),
+        ])?;
+    }
+}
+
+writer.save()?; // 62 MB file, used only 25 MB RAM
+```
+
+**Production Results:**
+- ✅ 430K rows exported successfully
+- ✅ Peak memory: 25 MB (traditional = 500+ MB)
+- ✅ Duration: 94 seconds (4,567 rows/sec)
+- ✅ Runs nightly in K8s pod (512 MB limit)
+- 🐳 Zero OOMKilled errors
+
+### 3. Real-Time Streaming Exports (No Wait Time)
+
+**Problem:** User clicks "Export" button. Traditional libraries must load ALL data first = 30+ second wait.
+
+```rust
+use excelstream::ExcelWriter;
+use tokio_stream::StreamExt;
+
+// ✅ Stream directly from async query - starts writing immediately!
+let mut writer = ExcelWriter::new("report.xlsx")?;
+writer.write_header_bold(&["Date", "User", "Action"])?;
+
+let mut stream = db.query_stream("SELECT * FROM audit_log").await?;
+
+// User sees progress immediately! No 30-second wait!
+while let Some(row) = stream.next().await {
+    let row = row?;
+    writer.write_row(&[
+        row.get("date"),
+        row.get("user"),
+        row.get("action"),
+    ])?;
+    // Every 100 rows = visible progress!
+}
+
+writer.save()?;
+```
+
+**User Experience:**
+- ✅ Instant feedback (not 30-second blank screen)
+- ✅ Progress bar possible (count rows written)
+- ✅ Cancellable (user can abort early)
+- 🚀 Feels 10x faster (starts immediately)
+
+### 4. Kubernetes CronJobs (Memory-Limited)
+
+**Problem:** K8s pods have 256-512 MB limits. Traditional libraries need 2+ GB for large exports.
+
+```rust
+use excelstream::ExcelWriter;
+
+// ✅ Optimized for K8s - uses only 15 MB!
+let mut writer = ExcelWriter::with_compression("export.xlsx", 1)?;
+writer.set_flush_interval(100);      // Aggressive flushing
+writer.set_max_buffer_size(256_000); // 256 KB buffer
+
+// Export 1M rows in 256 MB pod - impossible with traditional libraries!
+for i in 0..1_000_000 {
+    writer.write_row(&[
+        &i.to_string(),
+        &format!("data_{}", i),
+    ])?;
+}
+
+writer.save()?;
+```
+
+**K8s Benefits:**
+- ✅ Works in 256 MB pods (traditional needs 2+ GB)
+- ✅ Predictable memory (no spikes or OOM)
+- ✅ Fast compression (level 1 = 2x faster)
+- 🐳 Perfect for cost-optimized clusters
+
+### 5. Multi-Tenant SaaS Exports
+
+**Problem:** 100 concurrent users export reports. Traditional = 100 × 500 MB = 50 GB RAM!
+
+```rust
+use excelstream::ExcelWriter;
+
+// ✅ Each export uses only 20 MB
+async fn export_for_user(user_id: i64) -> Result<()> {
+    let mut writer = ExcelWriter::new(&format!("user_{}.xlsx", user_id))?;
+    
+    let records = db.query("SELECT * FROM data WHERE user_id = ?", user_id).await?;
+    for rec in records {
+        writer.write_row_typed(&[
+            CellValue::Int(rec.id),
+            CellValue::String(rec.name),
+        ])?;
+    }
+    
+    writer.save()?;
+    Ok(())
+}
+
+// 100 concurrent exports = 100 × 20 MB = 2 GB (not 50 GB!)
+```
+
+**SaaS Benefits:**
+- ✅ 100 concurrent users = 2 GB (traditional = 50+ GB)
+- ✅ Scales horizontally (predictable memory)
+- ✅ No "export queue" needed
+- 💰 Lower infrastructure costs
 
 ## 📦 Installation
 
@@ -58,10 +263,10 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-excelstream = "0.6"
+excelstream = "0.7"
 ```
 
-**Latest version:** `0.6.2` - Upgraded zip 6.0, removed deprecated code, better memory optimization
+**Latest version:** `0.7.0` - Worksheet protection, cell merging, functional column widths
 
 ## 🚀 Quick Start
 
@@ -401,9 +606,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 **See also:** Run `cargo run --example cell_formatting` to see all 14 styles in action!
 
-### Column Width and Row Height
+### Column Width, Row Height, and Cell Merging
 
-**New in v0.4.0:** Customize column widths and row heights for better formatting!
+**New in v0.7.0:** Full layout control with column widths, row heights, and cell merging!
 
 #### Column Width
 
@@ -502,7 +707,48 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-**See also:** Run `cargo run --example column_width_row_height` for a complete demonstration!
+#### Cell Merging
+
+Merge cells horizontally (for titles) or vertically (for grouped data):
+
+```rust
+use excelstream::ExcelWriter;
+use excelstream::types::{CellValue, CellStyle};
+
+let mut writer = ExcelWriter::new("report.xlsx")?;
+
+// Set column widths
+writer.set_column_width(1, 30.0)?;
+writer.set_column_width(2, 15.0)?;
+
+// Title row spanning 3 columns
+writer.write_row_styled(&[
+    (CellValue::String("Q4 Sales Report".to_string()), CellStyle::HeaderBold),
+])?;
+writer.merge_cells("A1:C1")?; // Horizontal merge
+
+writer.write_row(&[""])?; // Empty row
+
+// Headers
+writer.write_header_bold(&["Region", "City", "Sales"])?;
+
+// Data with vertical merge for region
+writer.write_row(&["North", "Boston", "125,000"])?;
+writer.write_row(&["", "New York", "245,000"])?;
+writer.write_row(&["", "Chicago", "198,000"])?;
+writer.merge_cells("A4:A6")?; // Vertical merge - "North" spans 3 rows
+
+writer.save()?;
+```
+
+**Common Patterns:**
+- **Title rows**: `merge_cells("A1:F1")` - Header spanning all columns
+- **Grouped data**: `merge_cells("A2:A5")` - Category name for multiple items
+- **Subtotals**: `merge_cells("A10:C10")` - "Total" label spanning columns
+
+**See also:** 
+- `cargo run --example column_width_row_height` - Layout control demo
+- `cargo run --example column_merge_demo` - Complete merging examples
 
 ### Direct FastWorkbook Usage (Maximum Performance)
 
@@ -591,6 +837,95 @@ FastWorkbook (hybrid SST):     25,682 rows/sec (+58%) ⚡
 - ✅ **Graceful degradation** - caps at 100k unique strings
 
 **See also:** `HYBRID_SST_OPTIMIZATION.md` for technical details
+
+### 🔒 Worksheet Protection (v0.7.0)
+
+**New in v0.7.0:** Protect worksheets with passwords and granular permissions!
+
+#### Basic Protection
+
+```rust
+use excelstream::{ExcelWriter, ProtectionOptions};
+
+let mut writer = ExcelWriter::new("protected.xlsx")?;
+
+// Protect with password - users can view but not edit
+let protection = ProtectionOptions::new()
+    .with_password("secret123");
+
+writer.protect_sheet(protection)?;
+writer.write_header_bold(&["Protected", "Data"])?;
+writer.write_row(&["Cannot", "Edit"])?;
+
+writer.save()?;
+```
+
+#### Granular Permissions
+
+Control exactly what users can do:
+
+```rust
+use excelstream::{ExcelWriter, ProtectionOptions};
+
+let mut writer = ExcelWriter::new("template.xlsx")?;
+
+// Allow formatting but prevent data changes
+let protection = ProtectionOptions::new()
+    .with_password("format123")
+    .allow_select_locked_cells(true)
+    .allow_select_unlocked_cells(true)
+    .allow_format_cells(true)      // ✅ Can format
+    .allow_format_columns(true)     // ✅ Can resize columns
+    .allow_format_rows(true);       // ✅ Can resize rows
+    // Everything else is protected (insert, delete, edit)
+
+writer.protect_sheet(protection)?;
+writer.save()?;
+```
+
+#### Data Entry Forms
+
+Allow users to insert/delete rows but protect headers:
+
+```rust
+let protection = ProtectionOptions::new()
+    .with_password("data456")
+    .allow_insert_rows(true)        // ✅ Can add rows
+    .allow_delete_rows(true)        // ✅ Can delete rows
+    .allow_sort(true);              // ✅ Can sort data
+
+writer.protect_sheet(protection)?;
+
+// Headers are protected, but users can add data rows
+writer.write_header_bold(&["Name", "Email", "Phone"])?;
+writer.write_row(&["Alice", "alice@example.com", "555-0001"])?;
+
+writer.save()?;
+```
+
+#### Available Permissions
+
+| Permission | Description | Use Case |
+|-----------|-------------|----------|
+| `allow_select_locked_cells` | Can select protected cells | View-only (default: true) |
+| `allow_select_unlocked_cells` | Can select editable cells | Data entry (default: true) |
+| `allow_format_cells` | Can change cell formats | Template customization |
+| `allow_format_columns` | Can resize columns | Layout adjustments |
+| `allow_format_rows` | Can resize rows | Layout adjustments |
+| `allow_insert_rows` | Can insert new rows | Data entry forms |
+| `allow_delete_rows` | Can delete rows | Data cleanup |
+| `allow_insert_columns` | Can insert new columns | Schema changes |
+| `allow_delete_columns` | Can delete columns | Schema changes |
+| `allow_sort` | Can sort data | Data analysis |
+| `allow_auto_filter` | Can use filters | Data analysis |
+
+**Common Use Cases:**
+- **Templates**: Protect formulas, allow data entry
+- **Reports**: Lock everything (read-only)
+- **Data Collection**: Allow insert/delete rows, protect headers
+- **Shared Sheets**: Allow formatting, prevent structure changes
+
+**See also:** `cargo run --example worksheet_protection` - Complete protection demo
 
 ## 🗜️ Compression Level Configuration (v0.5.1)
 

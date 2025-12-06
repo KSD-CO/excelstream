@@ -413,6 +413,34 @@ impl ExcelWriter {
         self.inner.set_next_row_height(height)
     }
 
+    /// Protect the current worksheet with options
+    ///
+    /// Protects the worksheet from editing. Users can still view and select cells
+    /// unless restricted. Call this after `add_sheet()` and before writing data.
+    ///
+    /// # Arguments
+    /// * `options` - Protection settings including password and permissions
+    ///
+    /// # Example
+    /// ```no_run
+    /// use excelstream::{ExcelWriter, ProtectionOptions};
+    ///
+    /// let mut writer = ExcelWriter::new("protected.xlsx").unwrap();
+    ///
+    /// // Default sheet is already created, protect it
+    /// let protection = ProtectionOptions::new()
+    ///     .with_password("secret123")
+    ///     .allow_select_locked_cells(true)
+    ///     .allow_select_unlocked_cells(true);
+    ///
+    /// writer.protect_sheet(protection).unwrap();
+    /// writer.write_row(&["Protected", "Data"]).unwrap();
+    /// writer.save().unwrap();
+    /// ```
+    pub fn protect_sheet(&mut self, options: crate::types::ProtectionOptions) -> Result<()> {
+        self.inner.protect_sheet(options)
+    }
+
     /// Set flush interval (rows between disk flushes)
     ///
     /// Default is 1000 rows. Lower values use less memory but slower.

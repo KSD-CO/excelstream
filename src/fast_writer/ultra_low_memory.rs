@@ -51,6 +51,7 @@ pub struct UltraLowMemoryWorkbook {
     xml_buffer: Vec<u8>,
     compression_level: u32,
     shared_strings: SharedStrings,
+    protection: Option<crate::types::ProtectionOptions>,
 }
 
 impl UltraLowMemoryWorkbook {
@@ -101,13 +102,54 @@ impl UltraLowMemoryWorkbook {
             xml_buffer: Vec::with_capacity(4096),
             compression_level: compression_level.min(9),
             shared_strings: SharedStrings::new(),
+            protection: None,
         })
+    }
+
+    /// Protect current worksheet with options
+    ///
+    /// Call this after add_worksheet() and before writing any data.
+    /// Protection is applied when the worksheet is closed.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use excelstream::fast_writer::UltraLowMemoryWorkbook;
+    /// use excelstream::ProtectionOptions;
+    ///
+    /// let mut wb = UltraLowMemoryWorkbook::new("protected.xlsx")?;
+    /// wb.add_worksheet("Data")?;
+    ///
+    /// // Protect with password
+    /// let protection = ProtectionOptions::new()
+    ///     .with_password("secret123")
+    ///     .allow_select_locked_cells(true);
+    /// wb.protect_sheet(protection)?;
+    ///
+    /// wb.write_row(&["Protected", "Data"])?;
+    /// wb.close()?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn protect_sheet(&mut self, options: crate::types::ProtectionOptions) -> Result<()> {
+        if self.current_writer.is_none() {
+            return Err(crate::error::ExcelError::WriteError(
+                "No active worksheet. Call add_worksheet() first.".to_string(),
+            ));
+        }
+        self.protection = Some(options);
+        Ok(())
     }
 
     pub fn add_worksheet(&mut self, name: &str) -> Result<()> {
         // Close previous worksheet
         if let Some(mut writer) = self.current_writer.take() {
-            writer.write_all(b"</sheetData></worksheet>")?;
+            writer.write_all(b"</sheetData>")?;
+
+            // Write protection AFTER </sheetData> but BEFORE </worksheet>
+            if let Some(ref protection) = self.protection {
+                Self::write_sheet_protection(&mut writer, protection)?;
+            }
+
+            writer.write_all(b"</worksheet>")?;
             writer.flush()?;
         }
 
@@ -115,6 +157,7 @@ impl UltraLowMemoryWorkbook {
         self.worksheets.push(name.to_string());
         self.current_row = 0;
         self.max_col = 0;
+        self.protection = None; // Reset protection for new sheet
 
         let path = self
             .temp_dir
@@ -362,7 +405,14 @@ impl UltraLowMemoryWorkbook {
     pub fn close(mut self) -> Result<()> {
         // Close current worksheet
         if let Some(mut writer) = self.current_writer.take() {
-            writer.write_all(b"</sheetData></worksheet>")?;
+            writer.write_all(b"</sheetData>")?;
+
+            // Write protection AFTER </sheetData> but BEFORE </worksheet>
+            if let Some(ref protection) = self.protection {
+                Self::write_sheet_protection(&mut writer, protection)?;
+            }
+
+            writer.write_all(b"</worksheet>")?;
             writer.flush()?;
         }
 
@@ -657,6 +707,61 @@ impl UltraLowMemoryWorkbook {
             zip.write_all(&buffer[..bytes_read])?;
         }
 
+        Ok(())
+    }
+
+    /// Write sheet protection XML
+    fn write_sheet_protection<W: Write>(
+        writer: &mut W,
+        protection: &crate::types::ProtectionOptions,
+    ) -> Result<()> {
+        writer.write_all(b"<sheetProtection")?;
+
+        // Password hash if set
+        if let Some(ref hash) = protection.password_hash {
+            write!(writer, " password=\"{}\"", hash)?;
+        }
+
+        // Write attributes - Excel logic:
+        // - Missing or "1" = PROTECTED (not allowed)
+        // - "0" = ALLOWED
+        // So we write "0" when user wants to ALLOW the action
+
+        if !protection.select_locked_cells {
+            writer.write_all(b" selectLockedCells=\"0\"")?;
+        }
+        if !protection.select_unlocked_cells {
+            writer.write_all(b" selectUnlockedCells=\"0\"")?;
+        }
+        if protection.format_cells {
+            writer.write_all(b" formatCells=\"0\"")?;
+        }
+        if protection.format_columns {
+            writer.write_all(b" formatColumns=\"0\"")?;
+        }
+        if protection.format_rows {
+            writer.write_all(b" formatRows=\"0\"")?;
+        }
+        if protection.insert_columns {
+            writer.write_all(b" insertColumns=\"0\"")?;
+        }
+        if protection.insert_rows {
+            writer.write_all(b" insertRows=\"0\"")?;
+        }
+        if protection.delete_columns {
+            writer.write_all(b" deleteColumns=\"0\"")?;
+        }
+        if protection.delete_rows {
+            writer.write_all(b" deleteRows=\"0\"")?;
+        }
+        if protection.sort {
+            writer.write_all(b" sort=\"0\"")?;
+        }
+        if protection.auto_filter {
+            writer.write_all(b" autoFilter=\"0\"")?;
+        }
+
+        writer.write_all(b" sheet=\"1\"/>")?;
         Ok(())
     }
 

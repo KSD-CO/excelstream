@@ -1,6 +1,6 @@
 [package]
 name = "excelstream"
-version = "0.6.2"
+version = "0.7.0"
 edition = "2021"
 authors = ["Ton That Vu <ttvuhm@gmail.com>"]
 description = "High-performance streaming Excel library - Read/write large XLSX files with memory-efficient streaming"

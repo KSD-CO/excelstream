@@ -259,6 +259,145 @@ impl Row {
     }
 }
 
+/// Worksheet protection options
+#[derive(Debug, Clone)]
+pub struct ProtectionOptions {
+    /// Password hash (optional) - use set_password() to hash
+    pub password_hash: Option<String>,
+    /// Allow selecting locked cells (default: true)
+    pub select_locked_cells: bool,
+    /// Allow selecting unlocked cells (default: true)
+    pub select_unlocked_cells: bool,
+    /// Allow formatting cells (default: false)
+    pub format_cells: bool,
+    /// Allow formatting columns (default: false)
+    pub format_columns: bool,
+    /// Allow formatting rows (default: false)
+    pub format_rows: bool,
+    /// Allow inserting columns (default: false)
+    pub insert_columns: bool,
+    /// Allow inserting rows (default: false)
+    pub insert_rows: bool,
+    /// Allow deleting columns (default: false)
+    pub delete_columns: bool,
+    /// Allow deleting rows (default: false)
+    pub delete_rows: bool,
+    /// Allow sorting (default: false)
+    pub sort: bool,
+    /// Allow auto filter (default: false)
+    pub auto_filter: bool,
+}
+
+impl Default for ProtectionOptions {
+    fn default() -> Self {
+        ProtectionOptions {
+            password_hash: None,
+            select_locked_cells: true,
+            select_unlocked_cells: true,
+            format_cells: false,
+            format_columns: false,
+            format_rows: false,
+            insert_columns: false,
+            insert_rows: false,
+            delete_columns: false,
+            delete_rows: false,
+            sort: false,
+            auto_filter: false,
+        }
+    }
+}
+
+impl ProtectionOptions {
+    /// Create new protection with default settings (most restrictive)
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set password for protection (hashed with Excel's algorithm)
+    pub fn with_password(mut self, password: &str) -> Self {
+        self.password_hash = Some(Self::hash_password(password));
+        self
+    }
+
+    /// Allow users to select locked cells
+    pub fn allow_select_locked_cells(mut self, allow: bool) -> Self {
+        self.select_locked_cells = allow;
+        self
+    }
+
+    /// Allow users to select unlocked cells
+    pub fn allow_select_unlocked_cells(mut self, allow: bool) -> Self {
+        self.select_unlocked_cells = allow;
+        self
+    }
+
+    /// Allow users to format cells
+    pub fn allow_format_cells(mut self, allow: bool) -> Self {
+        self.format_cells = allow;
+        self
+    }
+
+    /// Allow users to format columns
+    pub fn allow_format_columns(mut self, allow: bool) -> Self {
+        self.format_columns = allow;
+        self
+    }
+
+    /// Allow users to format rows
+    pub fn allow_format_rows(mut self, allow: bool) -> Self {
+        self.format_rows = allow;
+        self
+    }
+
+    /// Allow users to insert columns
+    pub fn allow_insert_columns(mut self, allow: bool) -> Self {
+        self.insert_columns = allow;
+        self
+    }
+
+    /// Allow users to insert rows
+    pub fn allow_insert_rows(mut self, allow: bool) -> Self {
+        self.insert_rows = allow;
+        self
+    }
+
+    /// Allow users to delete columns
+    pub fn allow_delete_columns(mut self, allow: bool) -> Self {
+        self.delete_columns = allow;
+        self
+    }
+
+    /// Allow users to delete rows
+    pub fn allow_delete_rows(mut self, allow: bool) -> Self {
+        self.delete_rows = allow;
+        self
+    }
+
+    /// Allow users to sort
+    pub fn allow_sort(mut self, allow: bool) -> Self {
+        self.sort = allow;
+        self
+    }
+
+    /// Allow users to use auto filter
+    pub fn allow_auto_filter(mut self, allow: bool) -> Self {
+        self.auto_filter = allow;
+        self
+    }
+
+    /// Hash password using Excel's algorithm (simple XOR-based)
+    fn hash_password(password: &str) -> String {
+        let mut hash: u16 = 0;
+        for ch in password.chars().rev() {
+            let val = (ch as u16).rotate_left(1);
+            hash ^= val;
+        }
+        hash ^= password.len() as u16;
+        hash ^= 0xCE4B;
+        format!("{:04X}", hash)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
