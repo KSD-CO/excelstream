@@ -7,7 +7,7 @@
 //! - **Streaming Read**: Read large Excel files without loading entire file into memory
 //! - **Streaming Write**: Write millions of rows with constant ~80MB memory usage
 //! - **Formula Support**: Write Excel formulas that calculate correctly
-//! - **High Performance**: 30K-45K rows/sec throughput with true streaming
+//! - **High Performance**: 30K-45K rows/sec throughput with streaming
 //! - **Better Errors**: Context-rich error messages with debugging info
 //! - **Multiple Formats**: Support for XLSX, XLS, ODS formats
 //! - **Type Safety**: Strong typing with Rust's type system
@@ -18,10 +18,10 @@
 //! ### Reading Excel Files (Streaming)
 //!
 //! ```rust,no_run
-//! use excelstream::reader::ExcelReader;
+//! use excelstream::streaming_reader::StreamingReader;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut reader = ExcelReader::open("data.xlsx")?;
+//! let mut reader = StreamingReader::open("data.xlsx")?;
 //!
 //! for row_result in reader.rows("Sheet1")? {
 //!     let row = row_result?;
@@ -64,12 +64,12 @@
 
 pub mod error;
 pub mod fast_writer;
-pub mod reader;
+pub mod streaming_reader;
 pub mod types;
 pub mod writer;
 
 pub use error::{ExcelError, Result};
-pub use reader::ExcelReader;
+pub use streaming_reader::StreamingReader as ExcelReader; // Re-export for backward compatibility
 pub use types::{Cell, CellStyle, CellValue, ProtectionOptions, Row, StyledCell};
 pub use writer::ExcelWriter;
 

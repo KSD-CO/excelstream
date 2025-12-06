@@ -50,24 +50,6 @@ pub enum ExcelError {
     NotSupported(String),
 }
 
-impl From<calamine::Error> for ExcelError {
-    fn from(err: calamine::Error) -> Self {
-        ExcelError::CaliamineError(err.to_string())
-    }
-}
-
-impl From<calamine::XlsxError> for ExcelError {
-    fn from(err: calamine::XlsxError) -> Self {
-        ExcelError::CaliamineError(err.to_string())
-    }
-}
-
-impl From<calamine::XlsError> for ExcelError {
-    fn from(err: calamine::XlsError) -> Self {
-        ExcelError::CaliamineError(err.to_string())
-    }
-}
-
 impl From<zip::result::ZipError> for ExcelError {
     fn from(err: zip::result::ZipError) -> Self {
         ExcelError::WriteError(err.to_string())

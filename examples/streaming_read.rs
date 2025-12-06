@@ -1,5 +1,6 @@
 //! Streaming read example - Process large Excel files with minimal memory usage
 
+use excelstream::types::CellValue;
 use excelstream::ExcelReader;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -8,10 +9,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Open Excel file
     let mut reader = ExcelReader::open("examples/large_output.xlsx")?;
-
-    // Get dimensions
-    let (rows, cols) = reader.dimensions("Sheet1")?;
-    println!("File dimensions: {} rows x {} columns\n", rows, cols);
 
     // Stream through rows one at a time
     let mut row_count = 0;
@@ -24,8 +21,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Process each row (e.g., sum numeric values)
         for cell in &row.cells {
-            if let Some(value) = cell.as_f64() {
-                total_sum += value;
+            if let CellValue::String(s) = cell {
+                if let Ok(value) = s.parse::<f64>() {
+                    total_sum += value;
+                }
             }
         }
 

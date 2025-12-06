@@ -182,10 +182,12 @@ impl Iterator for RowIterator {
         let (_, cols) = self.range.get_size();
         let mut cells = Vec::with_capacity(cols);
 
-        for col in 0..cols {
+        // Optimize: iterate directly without intermediate conversions
+        let start_col = self.range.start().map(|(_, c)| c).unwrap_or(0);
+        for col in start_col..start_col + cols as u32 {
             let cell_value = self
                 .range
-                .get_value((row_idx, col as u32))
+                .get_value((row_idx, col))
                 .map(datatype_to_cellvalue)
                 .unwrap_or(CellValue::Empty);
 
@@ -197,6 +199,7 @@ impl Iterator for RowIterator {
 }
 
 /// Convert calamine Data to our CellValue
+#[inline]
 fn datatype_to_cellvalue(dt: &Data) -> CellValue {
     match dt {
         Data::Empty => CellValue::Empty,

@@ -1,6 +1,6 @@
-//! Excel file writing with TRUE streaming support
+//! Excel file writing with streaming support
 //!
-//! **Breaking Change in v0.2.0:** ExcelWriter now uses true streaming with constant memory usage.
+//! **Breaking Change in v0.2.0:** ExcelWriter now uses streaming with constant memory usage.
 //! Data is written directly to disk as you call write_row(), not kept in memory.
 
 use crate::error::Result;
@@ -8,9 +8,9 @@ use crate::fast_writer::UltraLowMemoryWorkbook;
 use crate::types::{CellStyle, CellValue};
 use std::path::Path;
 
-/// Excel file writer with TRUE streaming capabilities
+/// Excel file writer with streaming capabilities
 ///
-/// **V0.2.0 Breaking Change:** Now uses true streaming underneath.
+/// **V0.2.0 Breaking Change:** Now uses streaming underneath.
 /// Data is written directly to disk with constant memory usage.
 ///
 /// Writes Excel files row by row, streaming data directly to a ZIP file.
