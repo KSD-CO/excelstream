@@ -142,13 +142,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 // Generate a row with 30 columns of mixed data types
 fn generate_row(row_num: usize) -> Vec<String> {
     vec![
-        format!("{}", row_num),                                      // ID
-        format!("User_{}", row_num),                                 // Name
-        format!("user{}@example.com", row_num),                      // Email
-        format!("{}", 20 + (row_num % 50)),                          // Age
-        format!("{:.2}", 30000.0 + (row_num as f64 * 123.45)),       // Salary
-        if row_num.is_multiple_of(2) { "true" } else { "false" }.to_string(), // Active
-        format!("{:.1}", 50.0 + (row_num % 50) as f64),              // Score
+        format!("{}", row_num),                                // ID
+        format!("User_{}", row_num),                           // Name
+        format!("user{}@example.com", row_num),                // Email
+        format!("{}", 20 + (row_num % 50)),                    // Age
+        format!("{:.2}", 30000.0 + (row_num as f64 * 123.45)), // Salary
+        if row_num.is_multiple_of(2) {
+            "true"
+        } else {
+            "false"
+        }
+        .to_string(), // Active
+        format!("{:.1}", 50.0 + (row_num % 50) as f64),        // Score
         match row_num % 5 {
             // Department
             0 => "Engineering",
