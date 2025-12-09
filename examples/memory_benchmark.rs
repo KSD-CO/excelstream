@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "Metadata",
             "Reference",
         ];
-        writer.write_header(&headers)?;
+        writer.write_header(headers)?;
 
         // Track peak memory during write
         let mut peak_mem = mem_start;

@@ -53,11 +53,9 @@ impl ZeroTempWorkbook {
         self.zip_writer.as_mut().unwrap().start_entry(&entry_name)?;
 
         // Write worksheet XML header
-        let header = format!(
-            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        let header = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheetData>"#
-        );
+<sheetData>"#;
 
         self.zip_writer
             .as_mut()
