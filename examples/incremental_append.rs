@@ -26,12 +26,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !std::path::Path::new(file_path).exists() {
         println!("📝 Creating initial log file...");
         let mut writer = ExcelWriter::new(file_path)?;
-        writer.write_header_bold(&["Date", "Event", "Status", "Details"])?;
+        writer.write_header_bold(["Date", "Event", "Status", "Details"])?;
 
         // Add initial data
-        writer.write_row(&["2024-12-01", "System startup", "Success", "Server initialized"])?;
-        writer.write_row(&["2024-12-02", "Daily backup", "Success", "All data backed up"])?;
-        writer.write_row(&["2024-12-03", "Database update", "Success", "Schema updated"])?;
+        writer.write_row([
+            "2024-12-01",
+            "System startup",
+            "Success",
+            "Server initialized",
+        ])?;
+        writer.write_row([
+            "2024-12-02",
+            "Daily backup",
+            "Success",
+            "All data backed up",
+        ])?;
+        writer.write_row(["2024-12-03", "Database update", "Success", "Schema updated"])?;
 
         writer.save()?;
         println!("✅ Initial file created with 3 rows\n");
@@ -53,13 +63,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let new_entries = [
         ("2024-12-10", "User login", "Success", "Admin logged in"),
         ("2024-12-10", "Data export", "Success", "Report generated"),
-        ("2024-12-10", "Security scan", "Warning", "2 minor issues found"),
-        ("2024-12-11", "Backup", "Success", "Incremental backup completed"),
-        ("2024-12-11", "Update check", "Info", "New version available"),
+        (
+            "2024-12-10",
+            "Security scan",
+            "Warning",
+            "2 minor issues found",
+        ),
+        (
+            "2024-12-11",
+            "Backup",
+            "Success",
+            "Incremental backup completed",
+        ),
+        (
+            "2024-12-11",
+            "Update check",
+            "Info",
+            "New version available",
+        ),
     ];
 
     for (date, event, status, details) in &new_entries {
-        appender.append_row(&[date, event, status, details])?;
+        appender.append_row([date, event, status, details])?;
         println!("  ✓ Added: {} - {}", date, event);
     }
 

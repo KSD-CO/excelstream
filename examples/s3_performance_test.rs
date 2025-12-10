@@ -14,8 +14,6 @@
 #[cfg(feature = "cloud-s3")]
 use excelstream::cloud::S3ExcelWriter;
 #[cfg(feature = "cloud-s3")]
-use excelstream::types::CellValue;
-#[cfg(feature = "cloud-s3")]
 use std::time::Instant;
 
 #[cfg(feature = "cloud-s3")]
@@ -41,14 +39,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Memory before start
     let memory_before = get_current_memory_kb();
-    println!("💾 Memory before start: {:.2} MB", memory_before as f64 / 1024.0);
+    println!(
+        "💾 Memory before start: {:.2} MB",
+        memory_before as f64 / 1024.0
+    );
 
     let total_start = Instant::now();
 
     // Create S3 Excel writer
     println!("\n⏳ Creating S3 Excel writer...");
     let writer_start = Instant::now();
-    let mut writer = S3ExcelWriter::new()
+    let mut writer = S3ExcelWriter::builder()
         .bucket(&bucket)
         .key(key)
         .region(&region)
@@ -61,37 +62,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Write header (30 columns with different data types)
     println!("\n📝 Writing header row (30 columns)...");
-    writer.write_header_bold(&[
-        "ID",              // Int
-        "Name",            // String
-        "Email",           // String
-        "Age",             // Int
-        "Salary",          // Float
-        "IsActive",        // Bool
-        "Department",      // String
-        "JoinDate",        // Date string
-        "Score1",          // Float
-        "Score2",          // Float
-        "Score3",          // Float
-        "Average",         // Formula
-        "Total",           // Formula
-        "City",            // String
-        "Country",         // String
-        "ZipCode",         // String
-        "Phone",           // String
-        "Website",         // String
-        "Revenue",         // Float
-        "Profit",          // Float
-        "Margin",          // Float (calculated)
-        "Quantity",        // Int
-        "UnitPrice",       // Float
-        "Discount",        // Float
-        "Tax",             // Float
-        "NetAmount",       // Float
-        "Currency",        // String
-        "Status",          // String
-        "Priority",        // Int
-        "Notes",           // String (long text)
+    writer.write_header_bold([
+        "ID",         // Int
+        "Name",       // String
+        "Email",      // String
+        "Age",        // Int
+        "Salary",     // Float
+        "IsActive",   // Bool
+        "Department", // String
+        "JoinDate",   // Date string
+        "Score1",     // Float
+        "Score2",     // Float
+        "Score3",     // Float
+        "Average",    // Formula
+        "Total",      // Formula
+        "City",       // String
+        "Country",    // String
+        "ZipCode",    // String
+        "Phone",      // String
+        "Website",    // String
+        "Revenue",    // Float
+        "Profit",     // Float
+        "Margin",     // Float (calculated)
+        "Quantity",   // Int
+        "UnitPrice",  // Float
+        "Discount",   // Float
+        "Tax",        // Float
+        "NetAmount",  // Float
+        "Currency",   // String
+        "Status",     // String
+        "Priority",   // Int
+        "Notes",      // String (long text)
     ])?;
 
     // Generate and write 100K rows
@@ -147,14 +148,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let tax = 0.08;
         let net_amount = (quantity as f64 * unit_price) * (1.0 - discount) * (1.0 + tax);
 
-        let currency = if i % 3 == 0 { "USD" } else if i % 3 == 1 { "EUR" } else { "JPY" };
+        let currency = if i % 3 == 0 {
+            "USD"
+        } else if i % 3 == 1 {
+            "EUR"
+        } else {
+            "JPY"
+        };
         let status = match i % 3 {
             0 => "Active",
             1 => "Pending",
             _ => "Completed",
         };
         let priority = (i % 5) + 1;
-        let notes = format!("This is a test note for row {} with some additional text to simulate real data", i);
+        let notes = format!(
+            "This is a test note for row {} with some additional text to simulate real data",
+            i
+        );
 
         // Convert to strings for write_row
         let id_str = id.to_string();
@@ -176,7 +186,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let net_amount_str = format!("{:.2}", net_amount);
         let priority_str = priority.to_string();
 
-        writer.write_row(&[
+        writer.write_row([
             &id_str,
             &name,
             &email,
@@ -254,9 +264,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✅ Success! File uploaded to: s3://{}/{}", bucket, key);
     println!();
     println!("⏱️  Timing:");
-    println!("   Writer initialization: {:.2}s", writer_time.as_secs_f64());
-    println!("   Writing {} rows:     {:.2}s", num_rows, write_time.as_secs_f64());
-    println!("   S3 upload:             {:.2}s", upload_time.as_secs_f64());
+    println!(
+        "   Writer initialization: {:.2}s",
+        writer_time.as_secs_f64()
+    );
+    println!(
+        "   Writing {} rows:     {:.2}s",
+        num_rows,
+        write_time.as_secs_f64()
+    );
+    println!(
+        "   S3 upload:             {:.2}s",
+        upload_time.as_secs_f64()
+    );
     println!("   Total time:            {:.2}s", total_time.as_secs_f64());
     println!();
     println!("🚀 Throughput:");
@@ -264,10 +284,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   Cells per second:      {:.0}", rows_per_sec * 30.0);
     println!();
     println!("💾 Memory Usage:");
-    println!("   Memory before:         {:.2} MB", memory_before as f64 / 1024.0);
-    println!("   Peak memory:           {:.2} MB", peak_memory as f64 / 1024.0);
-    println!("   Memory after:          {:.2} MB", memory_after as f64 / 1024.0);
-    println!("   Peak delta:            {:.2} MB", (peak_memory - memory_before) as f64 / 1024.0);
+    println!(
+        "   Memory before:         {:.2} MB",
+        memory_before as f64 / 1024.0
+    );
+    println!(
+        "   Peak memory:           {:.2} MB",
+        peak_memory as f64 / 1024.0
+    );
+    println!(
+        "   Memory after:          {:.2} MB",
+        memory_after as f64 / 1024.0
+    );
+    println!(
+        "   Peak delta:            {:.2} MB",
+        (peak_memory - memory_before) as f64 / 1024.0
+    );
     //println!("=" .repeat(70));
 
     Ok(())
@@ -296,6 +328,8 @@ fn main() {
     eprintln!("\nRun with:");
     eprintln!("  cargo run --example s3_performance_test --features cloud-s3 --release");
     eprintln!("\nFor detailed memory stats:");
-    eprintln!("  /usr/bin/time -v cargo run --example s3_performance_test --features cloud-s3 --release");
+    eprintln!(
+        "  /usr/bin/time -v cargo run --example s3_performance_test --features cloud-s3 --release"
+    );
     std::process::exit(1);
 }

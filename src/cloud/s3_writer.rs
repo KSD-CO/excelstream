@@ -17,7 +17,7 @@ use crate::writer::ExcelWriter;
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     let mut writer = S3ExcelWriter::new()
+///     let mut writer = S3ExcelWriter::builder()
 ///         .bucket("my-reports")
 ///         .key("monthly/2024-12.xlsx")
 ///         .region("us-east-1")
@@ -36,17 +36,17 @@ use crate::writer::ExcelWriter;
 pub struct S3ExcelWriter {
     bucket: String,
     key: String,
-    region: String,
+    _region: String,
     s3_client: Option<aws_sdk_s3::Client>,
-    buffer: CloudBuffer,
-    upload_id: Option<String>,
+    _buffer: CloudBuffer,
+    _upload_id: Option<String>,
     temp_file: Option<tempfile::NamedTempFile>,
     excel_writer: Option<ExcelWriter>,
 }
 
 impl S3ExcelWriter {
     /// Create a new S3 Excel writer builder
-    pub fn new() -> S3ExcelWriterBuilder {
+    pub fn builder() -> S3ExcelWriterBuilder {
         S3ExcelWriterBuilder::default()
     }
 
@@ -110,7 +110,7 @@ impl S3ExcelWriter {
             .key(&self.key)
             .send()
             .await
-            .map_err(|e| ExcelError::IoError(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+            .map_err(|e| ExcelError::IoError(std::io::Error::other(e.to_string())))?;
 
         let upload_id = create_multipart
             .upload_id()
@@ -133,7 +133,7 @@ impl S3ExcelWriter {
                 .body(chunk.to_vec().into())
                 .send()
                 .await
-                .map_err(|e| ExcelError::IoError(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+                .map_err(|e| ExcelError::IoError(std::io::Error::other(e.to_string())))?;
 
             if let Some(etag) = upload_part_res.e_tag() {
                 uploaded_parts.push(
@@ -158,7 +158,7 @@ impl S3ExcelWriter {
             .multipart_upload(completed_upload)
             .send()
             .await
-            .map_err(|e| ExcelError::IoError(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+            .map_err(|e| ExcelError::IoError(std::io::Error::other(e.to_string())))?;
 
         Ok(())
     }
@@ -169,10 +169,10 @@ impl Default for S3ExcelWriter {
         Self {
             bucket: String::new(),
             key: String::new(),
-            region: "us-east-1".to_string(),
+            _region: "us-east-1".to_string(),
             s3_client: None,
-            buffer: CloudBuffer::new(5 * 1024 * 1024), // 5 MB parts
-            upload_id: None,
+            _buffer: CloudBuffer::new(5 * 1024 * 1024), // 5 MB parts
+            _upload_id: None,
             temp_file: None,
             excel_writer: None,
         }
@@ -251,10 +251,10 @@ impl S3ExcelWriterBuilder {
         Ok(S3ExcelWriter {
             bucket,
             key,
-            region: region_str,
+            _region: region_str,
             s3_client: Some(s3_client),
-            buffer: CloudBuffer::new(5 * 1024 * 1024),
-            upload_id: None,
+            _buffer: CloudBuffer::new(5 * 1024 * 1024),
+            _upload_id: None,
             temp_file: Some(temp_file),
             excel_writer: Some(excel_writer),
         })

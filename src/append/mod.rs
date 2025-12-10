@@ -71,9 +71,7 @@ impl AppendableExcelWriter {
 
         // Verify file exists
         if !file_path.exists() {
-            return Err(ExcelError::FileNotFound(
-                file_path.display().to_string(),
-            ));
+            return Err(ExcelError::FileNotFound(file_path.display().to_string()));
         }
 
         Ok(Self {
@@ -106,8 +104,9 @@ impl AppendableExcelWriter {
 
         // Find sheet index by reading workbook.xml
         let workbook_xml_bytes = reader.read_entry_by_name("xl/workbook.xml")?;
-        let workbook_xml = String::from_utf8(workbook_xml_bytes)
-            .map_err(|e| ExcelError::InvalidState(format!("Invalid UTF-8 in workbook.xml: {}", e)))?;
+        let workbook_xml = String::from_utf8(workbook_xml_bytes).map_err(|e| {
+            ExcelError::InvalidState(format!("Invalid UTF-8 in workbook.xml: {}", e))
+        })?;
         let sheet_id = self.find_sheet_id(&workbook_xml, &sheet_name)?;
 
         // Read sheet XML to find last row number

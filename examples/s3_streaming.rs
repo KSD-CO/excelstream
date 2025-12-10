@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create S3 Excel writer
     println!("⏳ Creating S3 Excel writer...");
-    let mut writer = S3ExcelWriter::new()
+    let mut writer = S3ExcelWriter::builder()
         .bucket(&bucket)
         .key(key)
         .region(&region)
@@ -48,7 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Write header
     println!("📝 Writing header row...");
-    writer.write_header_bold(&["Month", "Product", "Sales", "Profit"])?;
+    writer.write_header_bold(["Month", "Product", "Sales", "Profit"])?;
 
     // Generate sample data
     println!("📊 Writing sales data...");
@@ -64,12 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let sales_str = format!("{:.2}", sales);
             let profit_str = format!("{:.2}", profit);
 
-            writer.write_row(&[
-                *month,
-                *product,
-                &sales_str,
-                &profit_str,
-            ])?;
+            writer.write_row([*month, *product, &sales_str, &profit_str])?;
 
             row_count += 1;
         }

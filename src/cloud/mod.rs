@@ -17,7 +17,7 @@
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let mut writer = S3ExcelWriter::new()
+//!     let mut writer = S3ExcelWriter::builder()
 //!         .bucket("my-bucket")
 //!         .key("reports/monthly.xlsx")
 //!         .region("us-east-1")
@@ -65,7 +65,10 @@ pub trait CloudStorage: Write + Send {
     ) -> impl std::future::Future<Output = Result<()>> + Send;
 
     /// Abort the upload if something goes wrong
-    fn abort_upload(&mut self, upload_id: &str) -> impl std::future::Future<Output = Result<()>> + Send;
+    fn abort_upload(
+        &mut self,
+        upload_id: &str,
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
 }
 
 /// In-memory buffer for cloud uploads
@@ -111,8 +114,7 @@ impl CloudBuffer {
 
     /// Record uploaded part
     pub fn add_uploaded_part(&mut self, etag: String) {
-        self.uploaded_parts
-            .push((self.current_part_number, etag));
+        self.uploaded_parts.push((self.current_part_number, etag));
         self.current_part_number += 1;
     }
 
