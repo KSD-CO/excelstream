@@ -68,7 +68,9 @@ impl From<s_zip::SZipError> for ExcelError {
         match err {
             s_zip::SZipError::Io(e) => ExcelError::IoError(e),
             s_zip::SZipError::InvalidFormat(msg) => ExcelError::InvalidFormat(msg),
-            s_zip::SZipError::EntryNotFound(name) => ExcelError::ReadError(format!("ZIP entry not found: {}", name)),
+            s_zip::SZipError::EntryNotFound(name) => {
+                ExcelError::ReadError(format!("ZIP entry not found: {}", name))
+            }
             s_zip::SZipError::UnsupportedCompression(method) => {
                 ExcelError::NotSupported(format!("Unsupported compression method: {}", method))
             }
