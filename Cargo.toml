@@ -1,6 +1,6 @@
 [package]
 name = "excelstream"
-version = "0.11.0"
+version = "0.11.1"
 edition = "2021"
 authors = ["Ton That Vu <ttvuhm@gmail.com>"]
 description = "High-performance streaming Excel library - Read/write large XLSX files with ultra-low memory (2.7 MB for any size)"
@@ -27,14 +27,16 @@ indexmap = "2"
 chrono = { version = "0.4", features = ["clock"] }
 itoa = "1.0"
 # s-zip for streaming ZIP operations
-s-zip = "0.1.0"
-# PostgreSQL dependencies (optional, only for examples)
+s-zip = "0.2.0"
+
+# Optional features (only enabled when needed)
+# PostgreSQL support (for examples)
 postgres = { version = "0.19", features = ["with-chrono-0_4"], optional = true }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"], optional = true }
 deadpool-postgres = { version = "0.14", optional = true }
 tokio = { version = "1", features = ["full"], optional = true }
 
-# Cloud storage dependencies (optional)
+# Cloud storage support (for examples)
 aws-config = { version = "1.0", optional = true }
 aws-sdk-s3 = { version = "1.0", optional = true }
 tempfile = { version = "3.8", optional = true }

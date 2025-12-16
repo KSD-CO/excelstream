@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.1] - 2024-12-16
+
+### Changed
+- **s-zip v0.2.0**: Updated to s-zip 0.2.0 with Write trait support
+  - Enables `from_writer<W: Write + Seek>()` for in-memory Excel generation
+  - Perfect for web servers (no temp files needed)
+  - All backward compatible, zero breaking changes
+
+### Internal
+- Clarified comments for optional dependencies (PostgreSQL, AWS)
+- All dependencies are optional features, only loaded when needed
+
+### Performance
+- Verified: Same performance as v0.11.0 (42K rows/sec, 2.5 MB memory)
+- All 40 tests passing
+- All 7 examples working
+
+
 ## [0.11.0] - 2024-12-15
 
 ### Changed
