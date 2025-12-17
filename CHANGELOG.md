@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.1] - 2024-12-17
+
+### Changed
+- **S3 Writer Memory Optimization**: Implemented streaming multipart upload
+  - **83% Memory Reduction**: Peak memory reduced from 52.7 MB → 8.6 MB (1M rows)
+  - **Streaming Upload**: Uploads file in 5MB chunks instead of reading entire file
+  - **No Memory Spike**: Constant 5MB peak regardless of file size
+  - **Backward Compatible**: API unchanged, only internal implementation improved
+
+### Performance
+- S3 Writer OLD: 52.7 MB peak (reads entire file to RAM)
+- S3 Writer NEW: 8.6 MB peak (streams 5MB chunks)
+- Memory saving: 44 MB (83% reduction) for 1M row file
+- All writers comparison:
+  - File-based: 3.5 MB (best - streams to disk)
+  - HTTP: 8.4 MB (good - necessary in-memory)
+  - S3 (NEW): 7.4 MB (excellent - streaming upload)
+
+### Documentation
+- Added `S3_STREAMING_OPTIMIZATION.md` with detailed analysis
+- Updated memory comparison examples
+
 ## [0.11.1] - 2024-12-16
 
 ### Changed

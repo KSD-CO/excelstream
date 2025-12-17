@@ -69,7 +69,12 @@ pub mod types;
 pub mod writer;
 
 // Cloud storage integration (optional)
-#[cfg(any(feature = "cloud-s3", feature = "cloud-gcs", feature = "cloud-azure"))]
+#[cfg(any(
+    feature = "cloud-s3",
+    feature = "cloud-gcs",
+    feature = "cloud-azure",
+    feature = "cloud-http"
+))]
 pub mod cloud;
 
 // Incremental append mode

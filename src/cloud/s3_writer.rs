@@ -82,21 +82,20 @@ impl S3ExcelWriter {
             .write_row_typed(cells)
     }
 
-    /// Save and upload Excel file to S3
+    /// Save and upload Excel file to S3 using streaming multipart upload
     pub async fn save(mut self) -> Result<()> {
         // Finalize Excel file
         if let Some(writer) = self.excel_writer.take() {
             writer.save()?;
         }
 
-        // Upload to S3
+        // Upload to S3 using streaming
         let temp_file = self
             .temp_file
             .take()
             .ok_or_else(|| ExcelError::InvalidState("No temp file".to_string()))?;
 
-        let file_path = temp_file.path();
-        let file_data = std::fs::read(file_path)?;
+        let file_path = temp_file.path().to_path_buf();
 
         let client = self
             .s3_client
@@ -117,12 +116,23 @@ impl S3ExcelWriter {
             .ok_or_else(|| ExcelError::InvalidState("No upload ID".to_string()))?
             .to_string();
 
-        // Upload file in parts (5MB chunks)
+        // Stream file in parts (5MB chunks) - NO FULL FILE READ!
         const PART_SIZE: usize = 5 * 1024 * 1024; // 5 MB
         let mut uploaded_parts = Vec::new();
 
-        for (i, chunk) in file_data.chunks(PART_SIZE).enumerate() {
-            let part_number = (i + 1) as i32;
+        use std::io::{Read, Seek, SeekFrom};
+        let mut file = std::fs::File::open(&file_path)?;
+        let file_size = file.metadata()?.len();
+        let mut part_number = 1i32;
+        let mut position = 0u64;
+
+        while position < file_size {
+            // Read only one chunk at a time
+            let chunk_size = std::cmp::min(PART_SIZE as u64, file_size - position) as usize;
+            let mut buffer = vec![0u8; chunk_size];
+
+            file.seek(SeekFrom::Start(position))?;
+            file.read_exact(&mut buffer)?;
 
             let upload_part_res = client
                 .upload_part()
@@ -130,7 +140,7 @@ impl S3ExcelWriter {
                 .key(&self.key)
                 .upload_id(&upload_id)
                 .part_number(part_number)
-                .body(chunk.to_vec().into())
+                .body(buffer.into())
                 .send()
                 .await
                 .map_err(|e| ExcelError::IoError(std::io::Error::other(e.to_string())))?;
@@ -143,6 +153,9 @@ impl S3ExcelWriter {
                         .build(),
                 );
             }
+
+            position += chunk_size as u64;
+            part_number += 1;
         }
 
         // Complete multipart upload

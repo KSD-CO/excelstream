@@ -1,6 +1,6 @@
 [package]
 name = "excelstream"
-version = "0.11.1"
+version = "0.12.0"
 edition = "2021"
 authors = ["Ton That Vu <ttvuhm@gmail.com>"]
 description = "High-performance streaming Excel library - Read/write large XLSX files with ultra-low memory (2.7 MB for any size)"
@@ -27,7 +27,7 @@ indexmap = "2"
 chrono = { version = "0.4", features = ["clock"] }
 itoa = "1.0"
 # s-zip for streaming ZIP operations
-s-zip = "0.2.0"
+s-zip = "0.3.1"
 
 # Optional features (only enabled when needed)
 # PostgreSQL support (for examples)
@@ -41,6 +41,9 @@ aws-config = { version = "1.0", optional = true }
 aws-sdk-s3 = { version = "1.0", optional = true }
 tempfile = { version = "3.8", optional = true }
 
+# HTTP streaming support (for examples)
+axum = { version = "0.7", optional = true }
+
 [dev-dependencies]
 tempfile = "3.8"
 criterion = "0.5"
@@ -52,6 +55,7 @@ parallel = ["dep:rayon"]
 postgres = ["dep:postgres"]
 postgres-async = ["dep:tokio-postgres", "dep:deadpool-postgres", "dep:tokio"]
 cloud-s3 = ["dep:aws-config", "dep:aws-sdk-s3", "dep:tokio", "dep:tempfile"]
+cloud-http = ["dep:axum", "dep:tokio", "dep:tempfile"]
 cloud-gcs = []  # Placeholder for future
 cloud-azure = []  # Placeholder for future
 
@@ -88,3 +92,13 @@ required-features = ["postgres-async"]
 name = "postgres_streaming"
 path = "examples/postgres_streaming.rs"
 required-features = ["postgres"]
+
+[[example]]
+name = "http_streaming"
+path = "examples/http_streaming.rs"
+required-features = ["cloud-http"]
+
+[[example]]
+name = "http_memory_test"
+path = "examples/http_memory_test.rs"
+required-features = ["cloud-http"]

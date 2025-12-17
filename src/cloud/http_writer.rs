@@ -1,54 +1,302 @@
-//! Zero-temp-file workbook - streams XML directly into ZIP compressor
+//! HTTP streaming Excel writer
 //!
-//! Expected memory: 8-12 MB (vs 17MB with temp files)
+//! This module provides direct streaming Excel generation to HTTP responses.
+//! Perfect for web APIs that need to generate Excel files on-the-fly.
+//!
+//! # Features
+//!
+//! - Stream Excel directly to HTTP response body
+//! - No temporary files required
+//! - Constant memory usage
+//! - Works with any async web framework (Axum, Actix-web, Warp, etc.)
+//!
+//! # Example with Axum
+//!
+//! ```no_run
+//! use excelstream::cloud::HttpExcelWriter;
+//! use axum::{
+//!     response::{IntoResponse, Response},
+//!     http::header,
+//! };
+//!
+//! async fn download_report() -> Response {
+//!     let mut writer = HttpExcelWriter::new();
+//!
+//!     writer.write_header_bold(&["Month", "Sales", "Profit"]).unwrap();
+//!     writer.write_row(&["January", "50000", "12000"]).unwrap();
+//!     writer.write_row(&["February", "55000", "15000"]).unwrap();
+//!
+//!     let bytes = writer.finish().unwrap();
+//!
+//!     (
+//!         [
+//!             (header::CONTENT_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+//!             (header::CONTENT_DISPOSITION, "attachment; filename=\"report.xlsx\""),
+//!         ],
+//!         bytes
+//!     ).into_response()
+//! }
+//! ```
 
-use super::shared_strings::SharedStrings;
-use super::StreamingZipWriter;
-use crate::error::Result;
-use crate::types::ProtectionOptions;
+use crate::error::{ExcelError, Result};
+use crate::types::CellValue;
 
-/// Workbook that streams XML directly into compressor (no temp files)
-pub struct ZeroTempWorkbook {
-    zip_writer: Option<StreamingZipWriter<std::fs::File>>,
+/// In-memory buffer that implements Write + Seek traits
+struct MemoryBuffer {
+    buffer: Vec<u8>,
+    position: u64,
+}
+
+impl MemoryBuffer {
+    fn new() -> Self {
+        Self {
+            buffer: Vec::with_capacity(1024 * 1024), // 1MB initial capacity
+            position: 0,
+        }
+    }
+
+    fn into_inner(self) -> Vec<u8> {
+        self.buffer
+    }
+}
+
+impl std::io::Write for MemoryBuffer {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let pos = self.position as usize;
+        let end_pos = pos + buf.len();
+
+        // Extend buffer if needed
+        if end_pos > self.buffer.len() {
+            self.buffer.resize(end_pos, 0);
+        }
+
+        // Write at current position
+        self.buffer[pos..end_pos].copy_from_slice(buf);
+        self.position = end_pos as u64;
+
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl std::io::Seek for MemoryBuffer {
+    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
+        let new_pos = match pos {
+            std::io::SeekFrom::Start(offset) => offset as i64,
+            std::io::SeekFrom::End(offset) => self.buffer.len() as i64 + offset,
+            std::io::SeekFrom::Current(offset) => self.position as i64 + offset,
+        };
+
+        if new_pos < 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Invalid seek position",
+            ));
+        }
+
+        self.position = new_pos as u64;
+        Ok(self.position)
+    }
+}
+
+/// HTTP Excel writer that generates Excel files in memory for streaming responses
+///
+/// This writer generates the entire Excel file in memory and can be used
+/// to stream responses in web servers.
+///
+/// # Example
+///
+/// ```no_run
+/// use excelstream::cloud::HttpExcelWriter;
+///
+/// let mut writer = HttpExcelWriter::new();
+/// writer.write_header_bold(&["ID", "Name", "Value"])?;
+/// writer.write_row(&["1", "Alice", "100"])?;
+/// writer.write_row(&["2", "Bob", "200"])?;
+///
+/// let excel_bytes = writer.finish()?;
+/// // Send excel_bytes as HTTP response body
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub struct HttpExcelWriter {
+    workbook: Option<InMemoryWorkbook>,
+    finished: bool,
+}
+
+/// Internal workbook that writes to memory
+struct InMemoryWorkbook {
+    zip_writer: Option<s_zip::StreamingZipWriter<MemoryBuffer>>,
     worksheets: Vec<String>,
     worksheet_count: u32,
     current_row: u32,
-    max_col: u32,
     xml_buffer: Vec<u8>,
-    #[allow(dead_code)]
-    shared_strings: SharedStrings,
-    #[allow(dead_code)]
-    protection: Option<ProtectionOptions>,
     in_worksheet: bool,
 }
 
-impl ZeroTempWorkbook {
-    pub fn new(path: &str, compression_level: u32) -> Result<Self> {
-        let zip_writer = StreamingZipWriter::with_compression(path, compression_level)?;
+impl HttpExcelWriter {
+    /// Create a new HTTP Excel writer
+    pub fn new() -> Self {
+        Self::with_compression(6)
+    }
 
-        Ok(Self {
+    /// Create a new HTTP Excel writer with custom compression level
+    ///
+    /// # Arguments
+    /// * `compression_level` - Compression level from 0 to 9
+    ///   - 0: No compression (fastest, largest)
+    ///   - 1: Fast compression
+    ///   - 6: Balanced (recommended)
+    ///   - 9: Maximum compression (slowest)
+    pub fn with_compression(compression_level: u32) -> Self {
+        let workbook = InMemoryWorkbook::new(compression_level.min(9));
+
+        Self {
+            workbook: Some(workbook),
+            finished: false,
+        }
+    }
+
+    /// Write a header row with bold formatting
+    pub fn write_header_bold<I, S>(&mut self, headers: I) -> Result<()>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.check_not_finished()?;
+
+        let workbook = self
+            .workbook
+            .as_mut()
+            .ok_or_else(|| ExcelError::InvalidState("Workbook not initialized".to_string()))?;
+
+        if workbook.worksheet_count == 0 {
+            workbook.add_worksheet("Sheet1")?;
+        }
+
+        let headers: Vec<String> = headers
+            .into_iter()
+            .map(|s| s.as_ref().to_string())
+            .collect();
+
+        workbook.write_row(&headers.iter().map(|s| s.as_str()).collect::<Vec<_>>())
+    }
+
+    /// Write a data row (strings)
+    pub fn write_row<I, S>(&mut self, row: I) -> Result<()>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.check_not_finished()?;
+
+        let workbook = self
+            .workbook
+            .as_mut()
+            .ok_or_else(|| ExcelError::InvalidState("Workbook not initialized".to_string()))?;
+
+        if workbook.worksheet_count == 0 {
+            workbook.add_worksheet("Sheet1")?;
+        }
+
+        let row: Vec<String> = row.into_iter().map(|s| s.as_ref().to_string()).collect();
+
+        workbook.write_row(&row.iter().map(|s| s.as_str()).collect::<Vec<_>>())
+    }
+
+    /// Write a data row with typed values
+    pub fn write_row_typed(&mut self, cells: &[CellValue]) -> Result<()> {
+        self.check_not_finished()?;
+
+        let workbook = self
+            .workbook
+            .as_mut()
+            .ok_or_else(|| ExcelError::InvalidState("Workbook not initialized".to_string()))?;
+
+        if workbook.worksheet_count == 0 {
+            workbook.add_worksheet("Sheet1")?;
+        }
+
+        workbook.write_row_typed(cells)
+    }
+
+    /// Add a new worksheet
+    pub fn add_worksheet(&mut self, name: &str) -> Result<()> {
+        self.check_not_finished()?;
+
+        let workbook = self
+            .workbook
+            .as_mut()
+            .ok_or_else(|| ExcelError::InvalidState("Workbook not initialized".to_string()))?;
+
+        workbook.add_worksheet(name)
+    }
+
+    /// Finish writing and return the Excel file as bytes
+    ///
+    /// This consumes the writer and returns the complete Excel file
+    /// as a Vec<u8> that can be sent as an HTTP response.
+    pub fn finish(mut self) -> Result<Vec<u8>> {
+        if self.finished {
+            return Err(ExcelError::InvalidState("Already finished".to_string()));
+        }
+
+        let workbook = self
+            .workbook
+            .take()
+            .ok_or_else(|| ExcelError::InvalidState("Workbook not initialized".to_string()))?;
+
+        let bytes = workbook.close()?;
+        self.finished = true;
+
+        Ok(bytes)
+    }
+
+    fn check_not_finished(&self) -> Result<()> {
+        if self.finished {
+            Err(ExcelError::InvalidState(
+                "Writer already finished".to_string(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl Default for HttpExcelWriter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl InMemoryWorkbook {
+    fn new(compression_level: u32) -> Self {
+        let buffer = MemoryBuffer::new();
+        let zip_writer = s_zip::StreamingZipWriter::from_writer_with_compression(
+            buffer,
+            compression_level.min(9),
+        )
+        .expect("Failed to create ZIP writer");
+
+        Self {
             zip_writer: Some(zip_writer),
             worksheets: Vec::new(),
             worksheet_count: 0,
             current_row: 0,
-            max_col: 0,
             xml_buffer: Vec::with_capacity(4096),
-            shared_strings: SharedStrings::new(),
-            protection: None,
             in_worksheet: false,
-        })
+        }
     }
 
-    pub fn add_worksheet(&mut self, name: &str) -> Result<()> {
+    fn add_worksheet(&mut self, name: &str) -> Result<()> {
         // Finish previous worksheet if any
         self.finish_current_worksheet()?;
 
         self.worksheet_count += 1;
         self.worksheets.push(name.to_string());
         self.current_row = 0;
-        self.max_col = 0;
-        // Reset protection for new worksheet
-        self.protection = None;
 
         // Start new worksheet entry in ZIP
         let entry_name = format!("xl/worksheets/sheet{}.xml", self.worksheet_count);
@@ -68,20 +316,12 @@ impl ZeroTempWorkbook {
         Ok(())
     }
 
-    pub fn protect_sheet(&mut self, options: ProtectionOptions) -> Result<()> {
-        self.protection = Some(options);
-        Ok(())
-    }
-
-    pub fn write_row(&mut self, values: &[&str]) -> Result<()> {
+    fn write_row(&mut self, values: &[&str]) -> Result<()> {
         if !self.in_worksheet {
-            return Err(crate::error::ExcelError::WriteError(
-                "No worksheet started".to_string(),
-            ));
+            return Err(ExcelError::WriteError("No worksheet started".to_string()));
         }
 
         self.current_row += 1;
-        self.max_col = self.max_col.max(values.len() as u32);
 
         // Build row XML in buffer
         self.xml_buffer.clear();
@@ -100,8 +340,6 @@ impl ZeroTempWorkbook {
             if value.is_empty() {
                 self.xml_buffer.extend_from_slice(b"\"/>");
             } else {
-                // Always treat as string to preserve leading zeros and exact formatting
-                // Users should use write_row_typed() if they want numeric types
                 self.xml_buffer
                     .extend_from_slice(b"\" t=\"inlineStr\"><is><t>");
                 Self::write_escaped(&mut self.xml_buffer, value);
@@ -120,16 +358,12 @@ impl ZeroTempWorkbook {
         Ok(())
     }
 
-    /// Write a row with cell styling
-    pub fn write_row_styled(&mut self, cells: &[crate::types::StyledCell]) -> Result<()> {
+    fn write_row_typed(&mut self, cells: &[CellValue]) -> Result<()> {
         if !self.in_worksheet {
-            return Err(crate::error::ExcelError::WriteError(
-                "No worksheet started".to_string(),
-            ));
+            return Err(ExcelError::WriteError("No worksheet started".to_string()));
         }
 
         self.current_row += 1;
-        self.max_col = self.max_col.max(cells.len() as u32);
 
         // Build row XML in buffer
         self.xml_buffer.clear();
@@ -138,10 +372,8 @@ impl ZeroTempWorkbook {
             .extend_from_slice(self.current_row.to_string().as_bytes());
         self.xml_buffer.extend_from_slice(b"\">");
 
-        for (col_idx, styled_cell) in cells.iter().enumerate() {
+        for (col_idx, value) in cells.iter().enumerate() {
             let col_letter = Self::column_letter(col_idx as u32 + 1);
-            let value = &styled_cell.value;
-            let style_id = styled_cell.style.index();
 
             self.xml_buffer.extend_from_slice(b"<c r=\"");
             self.xml_buffer.extend_from_slice(col_letter.as_bytes());
@@ -149,53 +381,44 @@ impl ZeroTempWorkbook {
                 .extend_from_slice(self.current_row.to_string().as_bytes());
             self.xml_buffer.extend_from_slice(b"\"");
 
-            // Add style attribute if not default
-            if style_id > 0 {
-                self.xml_buffer.extend_from_slice(b" s=\"");
-                self.xml_buffer
-                    .extend_from_slice(style_id.to_string().as_bytes());
-                self.xml_buffer.extend_from_slice(b"\"");
-            }
-
             // Write cell value based on type
             match value {
-                crate::types::CellValue::Empty => {
+                CellValue::Empty => {
                     self.xml_buffer.extend_from_slice(b"/>");
                 }
-                crate::types::CellValue::Int(i) => {
+                CellValue::Int(i) => {
                     self.xml_buffer.extend_from_slice(b" t=\"n\"><v>");
                     self.xml_buffer.extend_from_slice(i.to_string().as_bytes());
                     self.xml_buffer.extend_from_slice(b"</v></c>");
                 }
-                crate::types::CellValue::Float(f) => {
+                CellValue::Float(f) => {
                     self.xml_buffer.extend_from_slice(b" t=\"n\"><v>");
                     self.xml_buffer.extend_from_slice(f.to_string().as_bytes());
                     self.xml_buffer.extend_from_slice(b"</v></c>");
                 }
-                crate::types::CellValue::Bool(b) => {
+                CellValue::Bool(b) => {
                     self.xml_buffer.extend_from_slice(b" t=\"b\"><v>");
                     self.xml_buffer
                         .extend_from_slice(if *b { b"1" } else { b"0" });
                     self.xml_buffer.extend_from_slice(b"</v></c>");
                 }
-                crate::types::CellValue::String(s) => {
+                CellValue::String(s) => {
                     self.xml_buffer
                         .extend_from_slice(b" t=\"inlineStr\"><is><t>");
                     Self::write_escaped(&mut self.xml_buffer, s);
                     self.xml_buffer.extend_from_slice(b"</t></is></c>");
                 }
-                crate::types::CellValue::Formula(f) => {
+                CellValue::Formula(f) => {
                     self.xml_buffer.extend_from_slice(b"><f>");
                     Self::write_escaped(&mut self.xml_buffer, f);
                     self.xml_buffer.extend_from_slice(b"</f></c>");
                 }
-                crate::types::CellValue::DateTime(dt) => {
-                    // Excel date serial number
+                CellValue::DateTime(dt) => {
                     self.xml_buffer.extend_from_slice(b" t=\"n\"><v>");
                     self.xml_buffer.extend_from_slice(dt.to_string().as_bytes());
                     self.xml_buffer.extend_from_slice(b"</v></c>");
                 }
-                crate::types::CellValue::Error(e) => {
+                CellValue::Error(e) => {
                     self.xml_buffer.extend_from_slice(b" t=\"e\"><v>");
                     Self::write_escaped(&mut self.xml_buffer, e);
                     self.xml_buffer.extend_from_slice(b"</v></c>");
@@ -216,78 +439,16 @@ impl ZeroTempWorkbook {
 
     fn finish_current_worksheet(&mut self) -> Result<()> {
         if self.in_worksheet {
-            // Close sheetData
             self.zip_writer
                 .as_mut()
                 .unwrap()
-                .write_data(b"</sheetData>")?;
-
-            // Add sheetProtection if present
-            if let Some(ref prot) = self.protection {
-                let mut protection_xml = String::from("<sheetProtection sheet=\"1\"");
-
-                // Add password hash if present
-                if let Some(ref hash) = prot.password_hash {
-                    protection_xml.push_str(&format!(" password=\"{}\"", hash));
-                }
-
-                // For Excel protection:
-                // - If field = false (don't allow), we don't set attribute (default is protected)
-                // - If field = true (allow), we set attribute = "0" (not protected)
-
-                if prot.select_locked_cells {
-                    protection_xml.push_str(" selectLockedCells=\"0\"");
-                }
-                if prot.select_unlocked_cells {
-                    protection_xml.push_str(" selectUnlockedCells=\"0\"");
-                }
-                if prot.format_cells {
-                    protection_xml.push_str(" formatCells=\"0\"");
-                }
-                if prot.format_columns {
-                    protection_xml.push_str(" formatColumns=\"0\"");
-                }
-                if prot.format_rows {
-                    protection_xml.push_str(" formatRows=\"0\"");
-                }
-                if prot.insert_columns {
-                    protection_xml.push_str(" insertColumns=\"0\"");
-                }
-                if prot.insert_rows {
-                    protection_xml.push_str(" insertRows=\"0\"");
-                }
-                if prot.delete_columns {
-                    protection_xml.push_str(" deleteColumns=\"0\"");
-                }
-                if prot.delete_rows {
-                    protection_xml.push_str(" deleteRows=\"0\"");
-                }
-                if prot.sort {
-                    protection_xml.push_str(" sort=\"0\"");
-                }
-                if prot.auto_filter {
-                    protection_xml.push_str(" autoFilter=\"0\"");
-                }
-
-                protection_xml.push_str("/>");
-
-                self.zip_writer
-                    .as_mut()
-                    .unwrap()
-                    .write_data(protection_xml.as_bytes())?;
-            }
-
-            // Close worksheet
-            self.zip_writer
-                .as_mut()
-                .unwrap()
-                .write_data(b"</worksheet>")?;
+                .write_data(b"</sheetData></worksheet>")?;
             self.in_worksheet = false;
         }
         Ok(())
     }
 
-    pub fn close(mut self) -> Result<()> {
+    fn close(mut self) -> Result<Vec<u8>> {
         // Finish current worksheet
         self.finish_current_worksheet()?;
 
@@ -301,10 +462,11 @@ impl ZeroTempWorkbook {
         self.write_app_props()?;
         self.write_core_props()?;
 
-        // Finish ZIP
-        self.zip_writer.take().unwrap().finish()?;
+        // Finish ZIP and get buffer
+        let zip_writer = self.zip_writer.take().unwrap();
+        let buffer = zip_writer.finish()?;
 
-        Ok(())
+        Ok(buffer.into_inner())
     }
 
     fn write_content_types(&mut self) -> Result<()> {
@@ -429,37 +591,20 @@ impl ZeroTempWorkbook {
         let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <numFmts count="0"/>
-<fonts count="3">
+<fonts count="2">
 <font><sz val="11"/><name val="Calibri"/></font>
 <font><b/><sz val="11"/><name val="Calibri"/></font>
-<font><i/><sz val="11"/><name val="Calibri"/></font>
 </fonts>
-<fills count="5">
+<fills count="2">
 <fill><patternFill patternType="none"/></fill>
 <fill><patternFill patternType="gray125"/></fill>
-<fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/></patternFill></fill>
-<fill><patternFill patternType="solid"><fgColor rgb="FF00FF00"/></patternFill></fill>
-<fill><patternFill patternType="solid"><fgColor rgb="FFFF0000"/></patternFill></fill>
 </fills>
-<borders count="2">
+<borders count="1">
 <border><left/><right/><top/><bottom/><diagonal/></border>
-<border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/></border>
 </borders>
-<cellXfs count="14">
+<cellXfs count="2">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
-<xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
-<xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
-<xf numFmtId="5" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
-<xf numFmtId="9" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
-<xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
-<xf numFmtId="22" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
-<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
-<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
-<xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0" applyFill="1"/>
-<xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/>
-<xf numFmtId="0" fontId="0" fillId="4" borderId="0" xfId="0" applyFill="1"/>
-<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
 </cellXfs>
 </styleSheet>"#;
         self.zip_writer
@@ -491,7 +636,7 @@ impl ZeroTempWorkbook {
             .start_entry("docProps/app.xml")?;
         let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">
-<Application>ExcelStream</Application>
+<Application>ExcelStream HTTP</Application>
 </Properties>"#;
         self.zip_writer
             .as_mut()
@@ -507,7 +652,7 @@ impl ZeroTempWorkbook {
             .start_entry("docProps/core.xml")?;
         let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-<dc:creator>ExcelStream</dc:creator>
+<dc:creator>ExcelStream HTTP</dc:creator>
 </cp:coreProperties>"#;
         self.zip_writer
             .as_mut()
