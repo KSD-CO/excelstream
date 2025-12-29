@@ -284,7 +284,12 @@ fn generate_row(row_num: usize, num_cols: usize) -> Vec<String> {
             2 => format!("user{}@example.com", row_num),
             3 => format!("{}", 20 + (row_num % 50)),
             4 => format!("{:.2}", 50000.0 + (row_num as f64 * 123.45)),
-            5 => if row_num % 2 == 0 { "true" } else { "false" }.to_string(),
+            5 => if row_num.is_multiple_of(2) {
+                "true"
+            } else {
+                "false"
+            }
+            .to_string(),
             6 => format!("{:.1}", 50.0 + (row_num % 100) as f64),
             7 => format!("Department_{}", row_num % 5),
             8 => format!("2024-{:02}-{:02}", 1 + (row_num % 12), 1 + (row_num % 28)),
@@ -301,7 +306,7 @@ fn generate_row_typed(row_num: usize, num_cols: usize) -> Vec<CellValue> {
             2 => CellValue::String(format!("user{}@example.com", row_num)),
             3 => CellValue::Int((20 + (row_num % 50)) as i64),
             4 => CellValue::Float(50000.0 + (row_num as f64 * 123.45)),
-            5 => CellValue::Bool(row_num % 2 == 0),
+            5 => CellValue::Bool(row_num.is_multiple_of(2)),
             6 => CellValue::Float(50.0 + (row_num % 100) as f64),
             7 => CellValue::String(format!("Department_{}", row_num % 5)),
             8 => CellValue::String(format!(
