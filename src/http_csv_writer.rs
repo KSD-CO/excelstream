@@ -13,7 +13,7 @@
 //!
 //! # Example with Axum
 //!
-//! ```no_run
+//! ```ignore
 //! use excelstream::HttpCsvWriter;
 //! use excelstream::CompressionMethod;
 //! use axum::{

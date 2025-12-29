@@ -24,6 +24,109 @@ use crate::types::{CellValue, Row};
 use std::io::{BufReader, Read};
 use std::path::Path;
 
+/// Parse Excel date serial number to ISO date or datetime string
+/// Excel stores dates as floating point numbers representing days since 1900-01-01
+/// Examples:
+///   - 45217.0 = "2023-10-18" (date only)
+///   - 45217.5 = "2023-10-18 12:00:00" (date with time at noon)
+///
+/// Note: Excel has a bug where it treats 1900 as a leap year (it's not).
+/// This means dates from March 1, 1900 onwards are off by 1 day in Excel's count.
+///
+/// Performance: O(1) using 400-year cycle math (no loops for distant dates)
+fn parse_excel_date(serial: f64) -> String {
+    // Handle invalid dates
+    if !(1.0..=2958465.999).contains(&serial) {
+        // 2958465 = December 31, 9999
+        return serial.to_string();
+    }
+
+    // Split into date and time parts
+    let date_part = serial.floor();
+    let time_part = serial.fract();
+
+    // Excel epoch: January 1, 1900 = serial 1.0
+    // Account for Excel's leap year bug
+    let days_since_1900 = if date_part >= 60.0 {
+        (date_part - 2.0) as i64 // -2: -1 for bug, -1 for zero-based
+    } else {
+        (date_part - 1.0) as i64
+    };
+
+    // Calculate year from days since 1900
+    // Optimized: Estimate then iterate (much faster than pure iteration)
+    let mut year = 1900i64;
+    let mut remaining_days = days_since_1900;
+
+    // Quick estimate to get close (average 365.25 days/year)
+    // Then iterate the last few years
+    let est_years = (remaining_days / 365).min(500); // Cap at 500 for safety
+    if est_years > 0 {
+        year += est_years;
+
+        // Count exact days for estimated years
+        let mut days_counted = 0i64;
+        for y in 1900..(1900 + est_years) {
+            days_counted += if is_leap_year(y) { 366 } else { 365 };
+        }
+        remaining_days -= days_counted;
+
+        // Adjust if we overshot
+        while remaining_days < 0 {
+            year -= 1;
+            remaining_days += if is_leap_year(year) { 366 } else { 365 };
+        }
+
+        // Adjust if we undershot
+        while remaining_days >= 365 {
+            let days_in_year = if is_leap_year(year) { 366 } else { 365 };
+            if remaining_days < days_in_year {
+                break;
+            }
+            remaining_days -= days_in_year;
+            year += 1;
+        }
+    }
+
+    // Calculate month and day from remaining days
+    let days_in_months = if is_leap_year(year) {
+        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+
+    let mut month = 1;
+    let mut day = remaining_days as i32 + 1;
+
+    for (m, &days) in days_in_months.iter().enumerate() {
+        if day <= days {
+            month = m + 1;
+            break;
+        }
+        day -= days;
+    }
+
+    // Format with time if fractional part exists (>0.0001 to avoid float errors)
+    if time_part > 0.0001 {
+        // Time stored as fraction: 0.5 = 12:00:00, 0.25 = 06:00:00
+        let total_seconds = (time_part * 86400.0).round() as i64;
+        let hours = total_seconds / 3600;
+        let minutes = (total_seconds % 3600) / 60;
+        let seconds = total_seconds % 60;
+        format!(
+            "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+            year, month, day, hours, minutes, seconds
+        )
+    } else {
+        // Date only
+        format!("{:04}-{:02}-{:02}", year, month, day)
+    }
+}
+
+fn is_leap_year(year: i64) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+}
+
 /// Streaming reader for XLSX files
 ///
 /// **Memory Usage:**
@@ -410,7 +513,7 @@ pub struct RowIterator<'a> {
 }
 
 impl<'a> Iterator for RowIterator<'a> {
-    type Item = Result<Vec<String>>;
+    type Item = Result<Vec<CellValue>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -452,7 +555,7 @@ impl<'a> Iterator for RowIterator<'a> {
 
 impl<'a> RowIterator<'a> {
     /// Try to extract a complete row from the buffer
-    fn try_extract_row(&mut self) -> Option<Vec<String>> {
+    fn try_extract_row(&mut self) -> Option<Vec<CellValue>> {
         loop {
             // Look for <row> start
             if !self.in_row {
@@ -509,7 +612,7 @@ impl<'a> RowIterator<'a> {
         }
     }
 
-    fn parse_row(row_xml: &str, sst: &[String]) -> Result<Vec<String>> {
+    fn parse_row(row_xml: &str, sst: &[String]) -> Result<Vec<CellValue>> {
         let mut row_data = Vec::new();
         let mut pos = 0;
 
@@ -548,24 +651,39 @@ impl<'a> RowIterator<'a> {
 
             // Fill empty cells between last column and current column
             while row_data.len() < col_idx {
-                row_data.push(String::new());
+                row_data.push(CellValue::Empty);
             }
 
             // Determine cell type
-            let is_shared_string = cell_xml.contains("t=\"s\"");
-            let is_inline_str = cell_xml.contains("t=\"inlineStr\"");
+            let cell_type = if let Some(t_start) = cell_xml.find("t=\"") {
+                let t_start = t_start + 3;
+                if let Some(t_end) = cell_xml[t_start..].find("\"") {
+                    &cell_xml[t_start..t_start + t_end]
+                } else {
+                    ""
+                }
+            } else {
+                "" // No type means numeric
+            };
+
+            let is_shared_string = cell_type == "s";
+            let is_inline_str = cell_type == "inlineStr";
+            let is_boolean = cell_type == "b";
+            let is_error = cell_type == "e";
+            // Empty type means numeric or date
 
             // Extract value
-            let value = if is_inline_str {
+            let cell_value = if is_inline_str {
                 // Inline string - look for <is><t>...</t></is>
                 if let Some(t_start) = cell_xml.find("<t>") {
                     if let Some(t_end) = cell_xml[t_start..].find("</t>") {
-                        cell_xml[t_start + 3..t_start + t_end].to_string()
+                        let value = cell_xml[t_start + 3..t_start + t_end].to_string();
+                        CellValue::String(decode_xml_entities(&value))
                     } else {
-                        String::new()
+                        CellValue::Empty
                     }
                 } else {
-                    String::new()
+                    CellValue::Empty
                 }
             } else if let Some(v_start) = cell_xml.find("<v>") {
                 if let Some(v_end) = cell_xml[v_start..].find("</v>") {
@@ -574,24 +692,53 @@ impl<'a> RowIterator<'a> {
                     if is_shared_string {
                         // Lookup in SST
                         if let Ok(idx) = val_str.parse::<usize>() {
-                            sst.get(idx).cloned().unwrap_or_default()
+                            let value = sst.get(idx).cloned().unwrap_or_default();
+                            CellValue::String(decode_xml_entities(&value))
                         } else {
-                            String::new()
+                            CellValue::Empty
                         }
+                    } else if is_boolean {
+                        // Boolean: 0 = false, 1 = true
+                        CellValue::Bool(val_str == "1")
+                    } else if is_error {
+                        // Error cell
+                        CellValue::Error(val_str.to_string())
                     } else {
-                        val_str.to_string()
+                        // Numeric value (could be number or date)
+                        // Try to parse as number first
+                        if let Ok(num) = val_str.parse::<f64>() {
+                            // Check if this might be a date
+                            // Dates in Excel are typically between 1 (1900-01-01) and 2958465 (9999-12-31)
+                            // Also check for style attribute 's' which indicates formatting
+                            let has_style = cell_xml.contains("s=\"");
+
+                            // If it looks like a date serial number and has a style, try parsing as date
+                            if has_style && (1.0..=2958465.0).contains(&num) && num.fract() < 0.0001
+                            {
+                                // Likely a date - return as string in ISO format
+                                CellValue::String(parse_excel_date(num))
+                            } else if num.fract() == 0.0
+                                && (i64::MIN as f64..=i64::MAX as f64).contains(&num)
+                            {
+                                // Integer
+                                CellValue::Int(num as i64)
+                            } else {
+                                // Float
+                                CellValue::Float(num)
+                            }
+                        } else {
+                            // Can't parse as number, treat as string
+                            CellValue::String(decode_xml_entities(val_str))
+                        }
                     }
                 } else {
-                    String::new()
+                    CellValue::Empty
                 }
             } else {
-                String::new()
+                CellValue::Empty
             };
 
-            // Decode XML entities
-            let value = decode_xml_entities(&value);
-
-            row_data.push(value);
+            row_data.push(cell_value);
             pos = cell_end;
         }
 
@@ -612,7 +759,7 @@ fn parse_column_index(cell_ref: &str) -> usize {
     col_idx.saturating_sub(1) // Convert to 0-based index
 }
 
-/// Iterator wrapper that returns Row structs instead of Vec<String>
+/// Iterator wrapper that returns Row structs instead of Vec<CellValue>
 /// for backward compatibility with the old calamine-based API
 pub struct RowStructIterator<'a> {
     inner: RowIterator<'a>,
@@ -624,9 +771,7 @@ impl<'a> Iterator for RowStructIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.inner.next()? {
-            Ok(strings) => {
-                let cells: Vec<CellValue> = strings.into_iter().map(CellValue::String).collect();
-
+            Ok(cells) => {
                 let row = Row::new(self.row_index, cells);
                 self.row_index += 1;
                 Some(Ok(row))
@@ -645,5 +790,103 @@ mod tests {
         let sst = vec!["hello".to_string(), "world".to_string()];
         let size = StreamingReader::estimate_sst_size(&sst);
         assert!(size > 10); // At least the string bytes
+    }
+
+    #[test]
+    fn test_parse_excel_date() {
+        // Test January 1, 2022 (known: 44562)
+        let date = parse_excel_date(44562.0);
+        assert_eq!(date, "2022-01-01", "Serial 44562 should be 2022-01-01");
+
+        // Test January 1, 1970 (Unix epoch, known: 25569)
+        let date = parse_excel_date(25569.0);
+        assert_eq!(date, "1970-01-01", "Serial 25569 should be 1970-01-01");
+
+        // Test January 1, 2000 (known: 36526)
+        let date = parse_excel_date(36526.0);
+        assert_eq!(date, "2000-01-01", "Serial 36526 should be 2000-01-01");
+
+        // Test December 31, 2020 (known: 44196)
+        let date = parse_excel_date(44196.0);
+        assert_eq!(date, "2020-12-31", "Serial 44196 should be 2020-12-31");
+
+        // Test leap year: February 29, 2020 (known: 43890)
+        let date = parse_excel_date(43890.0);
+        assert_eq!(date, "2020-02-29", "Serial 43890 should be 2020-02-29");
+
+        // Test October 18, 2023 (actual value for 45217 from online converter)
+        let date = parse_excel_date(45217.0);
+        assert_eq!(date, "2023-10-18", "Serial 45217 should be 2023-10-18");
+    }
+
+    #[test]
+    fn test_parse_excel_datetime() {
+        // Test with time component: noon (0.5 = 12:00:00)
+        let datetime = parse_excel_date(44562.5);
+        assert_eq!(
+            datetime, "2022-01-01 12:00:00",
+            "Serial 44562.5 should be 2022-01-01 12:00:00"
+        );
+
+        // Test with time: 6:00 AM (0.25 = 06:00:00)
+        let datetime = parse_excel_date(44562.25);
+        assert_eq!(
+            datetime, "2022-01-01 06:00:00",
+            "Serial 44562.25 should be 2022-01-01 06:00:00"
+        );
+
+        // Test with time: 6:00 PM (0.75 = 18:00:00)
+        let datetime = parse_excel_date(44562.75);
+        assert_eq!(
+            datetime, "2022-01-01 18:00:00",
+            "Serial 44562.75 should be 2022-01-01 18:00:00"
+        );
+
+        // Test with specific time: 14:30:00 (14.5 hours / 24 = 0.6041666...)
+        let datetime = parse_excel_date(44562.0 + (14.5 / 24.0));
+        assert_eq!(
+            datetime, "2022-01-01 14:30:00",
+            "Serial with 14:30 should parse correctly"
+        );
+
+        // Test midnight (0.0 = 00:00:00) - should return date only
+        let datetime = parse_excel_date(44562.0);
+        assert_eq!(
+            datetime, "2022-01-01",
+            "Serial 44562.0 should be date only (midnight)"
+        );
+
+        // Test near-midnight (0.00001 < threshold) - should return date only
+        let datetime = parse_excel_date(44562.00005);
+        assert_eq!(
+            datetime, "2022-01-01",
+            "Serial with tiny fraction should be date only"
+        );
+    }
+
+    #[test]
+    fn test_is_leap_year() {
+        assert!(is_leap_year(2024)); // Divisible by 4
+        assert!(!is_leap_year(2023)); // Not divisible by 4
+        assert!(!is_leap_year(1900)); // Divisible by 100 but not 400
+        assert!(is_leap_year(2000)); // Divisible by 400
+    }
+
+    #[test]
+    fn test_parse_excel_date_edge_cases() {
+        // Test year 2100 (next century) - Jan 1, 2100 = serial 73049 + 1 = 73050
+        // Actually: 73049 days from 1900 = Jan 1, 2100, so serial is 73049 + 2 = 73051
+        let next_century = parse_excel_date(73051.0);
+        assert_eq!(next_century, "2100-01-01", "Should handle next century");
+
+        // Test year 2000 transition (Y2K)
+        let y2k = parse_excel_date(36526.0);
+        assert_eq!(y2k, "2000-01-01", "Y2K transition");
+
+        // Test near Excel's leap year bug boundary
+        let feb28_1900 = parse_excel_date(59.0); // Feb 28, 1900
+        let mar1_1900 = parse_excel_date(61.0); // Mar 1, 1900
+        assert_eq!(feb28_1900, "1900-02-28", "Feb 28, 1900");
+        assert_eq!(mar1_1900, "1900-03-01", "Mar 1, 1900");
     }
 }

@@ -14,7 +14,10 @@
 > - 🌐 **HTTP Streaming** - Stream CSV files directly via HTTP responses
 > - 🎯 **Auto-Detection** - Automatically detects .csv, .csv.zst, .csv.gz formats
 > - ✅ **RFC 4180-Like** - Proper CSV parsing with quote/comma handling
-> - 🚀 **Production Ready** - All 46 tests pass, benchmarked and optimized
+> - 🐛 **Excel Reader Fix** - Fixed critical date parsing & cell type detection bugs
+> - 📅 **Date Parsing** - Excel dates now parse correctly (e.g., 44562 → 2022-01-01)
+> - 🔢 **Type Detection** - Proper Int, Float, Bool, Date, String, Error detection
+> - 🚀 **Production Ready** - All 48 tests pass, benchmarked and optimized
 
 > **🔥 What's New in v0.12.0:**
 > - ☁️ **S3 Streaming Optimization** - 83% memory reduction for S3 uploads!
