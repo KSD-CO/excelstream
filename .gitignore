@@ -34,3 +34,7 @@ benches/results/
 
 *.xls
 *.xlsx
+
+examples/*.csv
+examples/*.zst
+examples/*.gz

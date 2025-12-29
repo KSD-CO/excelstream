@@ -68,6 +68,12 @@ pub mod streaming_reader;
 pub mod types;
 pub mod writer;
 
+// CSV support
+pub mod csv;
+pub mod csv_reader;
+pub mod csv_writer;
+pub mod http_csv_writer;
+
 // Cloud storage integration (optional)
 #[cfg(any(
     feature = "cloud-s3",
@@ -84,6 +90,12 @@ pub use error::{ExcelError, Result};
 pub use streaming_reader::StreamingReader as ExcelReader; // Re-export for backward compatibility
 pub use types::{Cell, CellStyle, CellValue, ProtectionOptions, Row, StyledCell};
 pub use writer::ExcelWriter;
+
+// CSV exports
+pub use csv::CompressionMethod;
+pub use csv_reader::CsvReader;
+pub use csv_writer::CsvWriter;
+pub use http_csv_writer::HttpCsvWriter;
 
 #[cfg(test)]
 mod tests {

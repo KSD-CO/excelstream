@@ -1,12 +1,12 @@
 [package]
 name = "excelstream"
-version = "0.12.0"
+version = "0.13.0"
 edition = "2021"
 authors = ["Ton That Vu <ttvuhm@gmail.com>"]
-description = "High-performance streaming Excel library - Read/write large XLSX files with ultra-low memory (2.7 MB for any size)"
+description = "High-performance streaming Excel & CSV library - Read/write large XLSX/CSV files with ultra-low memory and Zstd compression"
 license = "MIT"
 repository = "https://github.com/KSD-CO/excelstream"
-keywords = ["excel", "xlsx", "streaming", "fast", "memory-efficient"]
+keywords = ["excel", "xlsx", "csv", "streaming", "zstd"]
 categories = ["parsing", "encoding"]
 exclude = [
     "*.xlsx",
@@ -26,8 +26,8 @@ rayon = { version = "1.8", optional = true }
 indexmap = "2"
 chrono = { version = "0.4", features = ["clock"] }
 itoa = "1.0"
-# s-zip for streaming ZIP operations
-s-zip = "0.3.1"
+# s-zip for streaming ZIP operations (with Zstd compression support)
+s-zip = { version = "0.3.1", features = ["zstd-support"] }
 
 # Optional features (only enabled when needed)
 # PostgreSQL support (for examples)
