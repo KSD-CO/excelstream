@@ -24,8 +24,8 @@
 //!         .build()
 //!         .await?;
 //!
-//!     writer.write_row(&["ID", "Name", "Amount"])?;
-//!     writer.write_row(&["1", "Alice", "1000"])?;
+//!     writer.write_row(&["ID", "Name", "Amount"]).await?;
+//!     writer.write_row(&["1", "Alice", "1000"]).await?;
 //!
 //!     writer.save().await?;
 //!     Ok(())
