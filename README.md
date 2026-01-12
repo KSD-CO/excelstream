@@ -1,6 +1,6 @@
 # excelstream
 
-🦀 **High-performance streaming Excel & CSV library for Rust with constant memory usage**
+🦀 **High-performance streaming Excel, CSV & Parquet library for Rust with constant memory usage**
 
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -8,42 +8,37 @@
 
 ## ✨ Highlights
 
-- 📊 **XLSX & CSV Support** - Read/write Excel and CSV files
+- 📊 **XLSX, CSV & Parquet Support** - Read/write Excel, CSV, and Parquet files
 - 📉 **Constant Memory** - ~3-35 MB regardless of file size
-- ☁️ **Cloud Streaming** - Direct S3 uploads with ZERO temp files
+- ☁️ **Cloud Streaming** - Direct S3/GCS uploads with ZERO temp files
 - ⚡ **High Performance** - 94K rows/sec (S3), 1.2M rows/sec (CSV)
 - 🔄 **True Streaming** - Process files row-by-row, no buffering
+- 🗜️ **Parquet Conversion** - Stream Excel ↔ Parquet with constant memory
 - 🐳 **Production Ready** - Works in 256 MB containers
 
-## 🔥 What's New in v0.14.0
+## 🔥 What's New in v0.15.0
 
-**TRUE S3 Streaming** - Zero temp files, async API, constant memory!
+**Parquet Support** - Stream Excel ↔ Parquet with constant memory!
 
 ```rust
-use excelstream::cloud::S3ExcelWriter;
+use excelstream::parquet::{ExcelToParquetConverter, ParquetToExcelConverter};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut writer = S3ExcelWriter::builder()
-        .bucket("my-bucket")
-        .key("report.xlsx")
-        .region("us-east-1")
-        .build()
-        .await?;
+// Excel → Parquet (10K rows at a time, constant memory)
+let converter = ExcelToParquetConverter::new("data.xlsx")?;
+converter.convert_to_parquet("output.parquet")?;
 
-    writer.write_header_bold(["Month", "Sales"]).await?;
-    writer.write_row(["January", "50000"]).await?;
-    writer.save().await?; // ✅ Streams directly to S3!
-    Ok(())
-}
+// Parquet → Excel (streaming)
+let converter = ParquetToExcelConverter::new("data.parquet")?;
+converter.convert_to_excel("output.xlsx")?;
 ```
 
-**Performance:**
-- **500K rows** → 34 MB peak memory, 94K rows/sec
-- **ZERO temp files** → Works in read-only filesystems (Lambda!)
-- **Breaking change:** S3 methods now async (add `.await`)
+**Features:**
+- ✅ **Streaming conversion** - Constant memory (10K row batches)
+- ✅ **All data types** - Strings, numbers, booleans, dates
+- ✅ **High performance** - Process millions of rows efficiently
+- ✅ **Progress callbacks** - Track conversion progress
 
-[See full changelog](CHANGELOG.md) | [Migration guide](#migration-from-v013)
+[See full changelog](CHANGELOG.md) | [Parquet examples →](examples/)
 
 ---
 
@@ -53,10 +48,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-excelstream = "0.14"
+excelstream = "0.15"
 
 # Optional features
-excelstream = { version = "0.14", features = ["cloud-s3"] }  # S3 support
+excelstream = { version = "0.15", features = ["cloud-s3"] }        # S3 support
+excelstream = { version = "0.15", features = ["cloud-gcs"] }       # GCS support
+excelstream = { version = "0.15", features = ["parquet-support"] } # Parquet conversion
 ```
 
 ### Write Excel (Local)
@@ -165,6 +162,39 @@ Perfect for:
 
 [See S3 performance details →](PERFORMANCE_S3.md)
 
+### GCS Direct Streaming (v0.14)
+
+Upload Excel files directly to Google Cloud Storage with **ZERO temp files**:
+
+```bash
+cargo add excelstream --features cloud-gcs
+```
+
+```rust
+use excelstream::cloud::GCSExcelWriter;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut writer = GCSExcelWriter::builder()
+        .bucket("my-bucket")
+        .object("report.xlsx")
+        .build()
+        .await?;
+
+    writer.write_header_bold(["Month", "Sales"]).await?;
+    writer.write_row(["January", "50000"]).await?;
+    writer.save().await?; // ✅ Streams directly to GCS!
+    Ok(())
+}
+```
+
+Perfect for:
+- ✅ Cloud Run (read-only filesystem)
+- ✅ Cloud Functions (no disk space)
+- ✅ GKE workloads (limited memory)
+
+[See GCS example →](examples/gcs_streaming.rs)
+
 ### HTTP Streaming
 
 Stream Excel files directly to web responses:
@@ -201,6 +231,58 @@ writer.save()?;
 - ✅ Streaming (< 5 MB memory)
 
 [CSV examples →](examples/csv_write.rs)
+
+---
+
+## 🗜️ Parquet Support (v0.15+)
+
+Convert between Excel and Parquet with **constant memory** streaming:
+
+```bash
+cargo add excelstream --features parquet-support
+```
+
+### Excel → Parquet
+
+```rust
+use excelstream::parquet::ExcelToParquetConverter;
+
+let converter = ExcelToParquetConverter::new("data.xlsx")?;
+let rows = converter.convert_to_parquet("output.parquet")?;
+println!("Converted {} rows", rows);
+```
+
+### Parquet → Excel
+
+```rust
+use excelstream::parquet::ParquetToExcelConverter;
+
+let converter = ParquetToExcelConverter::new("data.parquet")?;
+let rows = converter.convert_to_excel("output.xlsx")?;
+println!("Converted {} rows", rows);
+```
+
+### Streaming with Progress
+
+```rust
+let converter = ParquetToExcelConverter::new("large.parquet")?;
+converter.convert_with_progress("output.xlsx", |current, total| {
+    println!("Progress: {}/{} rows", current, total);
+})?;
+```
+
+**Features:**
+- ✅ **Constant memory** - Processes in 10K row batches
+- ✅ **All data types** - Strings, numbers, booleans, dates, timestamps
+- ✅ **Progress tracking** - Monitor large conversions
+- ✅ **High performance** - Efficient columnar format handling
+
+**Use Cases:**
+- Convert Excel reports to Parquet for data lakes
+- Export Parquet data to Excel for analysis
+- Integrate with Apache Arrow/Spark workflows
+
+[Parquet examples →](examples/parquet_to_excel.rs)
 
 ---
 
@@ -255,8 +337,10 @@ writer.save().await?;  // No temp files, no disk!
 
 - [Excel Writing](examples/basic_write.rs) - Basic & advanced writing
 - [Excel Reading](examples/basic_read.rs) - Streaming read
-- [S3 Streaming](examples/s3_streaming.rs) - Cloud uploads
+- [S3 Streaming](examples/s3_streaming.rs) - AWS S3 uploads
+- [GCS Streaming](examples/gcs_streaming.rs) - Google Cloud Storage uploads
 - [CSV Support](examples/csv_write.rs) - CSV operations
+- [Parquet Conversion](examples/parquet_to_excel.rs) - Excel ↔ Parquet
 - [Styling](examples/cell_formatting.rs) - Cell formatting & colors
 
 ---
@@ -267,7 +351,9 @@ writer.save().await?;  // No temp files, no disk!
 |---------|-------------|
 | `default` | Core Excel/CSV with Zstd compression |
 | `cloud-s3` | S3 direct streaming (async) |
+| `cloud-gcs` | GCS direct streaming (async) |
 | `cloud-http` | HTTP response streaming |
+| `parquet-support` | Parquet ↔ Excel conversion |
 | `serde` | Serde serialization support |
 | `parallel` | Parallel processing with Rayon |
 

@@ -7,10 +7,10 @@
 //!
 //! - Stream Excel files directly to S3/GCS/Azure
 //! - Multipart upload for large files
-//! - Constant memory usage (2.7 MB)
+//! - Constant memory usage (~30-35 MB)
 //! - No temporary files
 //!
-//! # Example
+//! # S3 Example
 //!
 //! ```no_run
 //! use excelstream::cloud::S3ExcelWriter;
@@ -31,12 +31,36 @@
 //!     Ok(())
 //! }
 //! ```
+//!
+//! # GCS Example
+//!
+//! ```no_run
+//! use excelstream::cloud::GCSExcelWriter;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let mut writer = GCSExcelWriter::builder()
+//!         .bucket("my-bucket")
+//!         .object("reports/monthly.xlsx")
+//!         .build()
+//!         .await?;
+//!
+//!     writer.write_row(&["ID", "Name", "Amount"]).await?;
+//!     writer.write_row(&["1", "Alice", "1000"]).await?;
+//!
+//!     writer.save().await?;
+//!     Ok(())
+//! }
+//! ```
 
 #[cfg(feature = "cloud-s3")]
 pub mod s3_writer;
 
 #[cfg(feature = "cloud-s3")]
 pub mod s3_reader;
+
+#[cfg(feature = "cloud-gcs")]
+pub mod gcs_writer;
 
 #[cfg(feature = "cloud-http")]
 pub mod http_writer;
@@ -46,6 +70,9 @@ pub use s3_writer::S3ExcelWriter;
 
 #[cfg(feature = "cloud-s3")]
 pub use s3_reader::S3ExcelReader;
+
+#[cfg(feature = "cloud-gcs")]
+pub use gcs_writer::GCSExcelWriter;
 
 #[cfg(feature = "cloud-http")]
 pub use http_writer::HttpExcelWriter;

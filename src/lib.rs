@@ -83,6 +83,10 @@ pub mod http_csv_writer;
 ))]
 pub mod cloud;
 
+// Parquet support (optional)
+#[cfg(feature = "parquet-support")]
+pub mod parquet;
+
 // Incremental append mode
 pub mod append;
 

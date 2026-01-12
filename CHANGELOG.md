@@ -5,11 +5,73 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2025-01-12
+
+### 🎉 Major Features
+
+**Parquet Support** - Convert between Excel and Parquet formats with constant memory streaming!
+
+- **Excel ↔ Parquet Conversion**: Bidirectional conversion with streaming architecture
+- **Constant Memory**: Processes in 10K row batches regardless of file size
+- **All Data Types**: Supports strings, numbers, booleans, dates, timestamps, and more
+- **Progress Tracking**: Monitor large conversions with callback functions
+
+### Added
+- **High-Level Converters**:
+  - `ExcelToParquetConverter`: Convert Excel files to Parquet format
+    - Streaming conversion with 10K row batches
+    - Constant memory usage
+    - Progress callback support
+  - `ParquetToExcelConverter`: Convert Parquet files to Excel format
+    - Row-by-row streaming
+    - Progress callback with row count
+    - Header formatting with bold style
+- **Low-Level API**:
+  - `ParquetReader`: Stream Parquet files row-by-row
+    - Schema inspection
+    - Row count metadata
+    - Iterator-based row access
+    - Comprehensive data type support (Int8/16/32/64, UInt8/16/32/64, Float32/64, Boolean, Date32/64, Timestamp, Utf8, LargeUtf8)
+- **New Feature Flag**: `parquet-support`
+  - Enables Apache Parquet and Apache Arrow dependencies
+  - Optional feature to minimize base library size
+- **New Examples**:
+  - `parquet_to_excel.rs`: Convert Parquet to Excel
+  - `excel_to_parquet.rs`: Convert Excel to Parquet
+  - `parquet_streaming.rs`: Advanced streaming with filtering
+  - `parquet_performance_test.rs`: Benchmark conversions and measure memory
+
+### Technical Details
+- **Dependencies**:
+  - Apache Parquet 57 (with arrow, snap, zstd features)
+  - Apache Arrow 57 (with ipc feature)
+- **Memory Efficiency**:
+  - Excel → Parquet: 10K row batches, constant memory
+  - Parquet → Excel: Streaming record batches
+  - No full file loads into memory
+- **Data Type Handling**:
+  - All Parquet primitive types supported
+  - Automatic string conversion for Excel compatibility
+  - Null handling with empty string fallback
+
+### Performance
+- **Streaming Architecture**: Processes millions of rows efficiently
+- **Batch Processing**: 10K rows per batch for optimal memory/speed balance
+- **Columnar Conversion**: Efficient row-to-column and column-to-row transformations
+
+### Documentation
+- Updated README with Parquet section and examples
+- Updated package description to include Parquet support
+- Added comprehensive code examples and use cases
+
 ## [0.14.0] - 2025-01-02
 
-### 🎉 Major Feature: TRUE S3 Streaming (ZERO Temp Files!)
+### 🎉 Major Features
 
-**Revolutionary S3 integration** using s-zip 0.5.1 cloud support - stream Excel files directly to S3 with NO temp files and constant memory!
+**Revolutionary Cloud Integration** - Stream Excel files directly to AWS S3 and Google Cloud Storage with NO temp files and constant memory!
+
+- **S3 Direct Streaming**: Using s-zip cloud-s3 support
+- **GCS Direct Streaming**: Using s-zip cloud-gcs support (NEW!)
 
 ### Changed
 - **S3ExcelWriter - TRUE Streaming**: Complete rewrite using s-zip 0.5.1 cloud-s3
@@ -40,17 +102,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TRUE streaming confirmed - no file-size-proportional growth!
 
 ### Added
+- **GCS Support**: New `GCSExcelWriter` for Google Cloud Storage
+  - `cloud-gcs` feature flag
+  - Async streaming API matching S3ExcelWriter
+  - Zero temp files, constant memory usage
 - **New Examples**:
+  - `gcs_streaming.rs`: Stream Excel to Google Cloud Storage
+  - `gcs_performance_test.rs`: Benchmark GCS streaming performance
   - `s3_performance_test.rs`: Benchmark S3 streaming with configurable dataset size
   - `s3_verify.rs`: Download and verify S3 uploaded files
 - **Performance Documentation**:
   - `PERFORMANCE_S3.md`: Detailed memory usage analysis and benchmarks
 
 ### Internal
-- Updated s-zip dependency: 0.3.1 → 0.5.1
-- Added s-zip cloud-s3 feature to cloud-s3 feature flag
+- Updated s-zip dependency: 0.3.1 → 0.6.0
+- Added s-zip cloud-s3 and cloud-gcs features
+- Added google-cloud-storage and google-cloud-auth dependencies for GCS support
 - Removed tempfile from S3 writer implementation (still needed for S3 reader)
 - S3ExcelWriter now uses `s_zip::cloud::S3ZipWriter` + `AsyncStreamingZipWriter`
+- GCSExcelWriter uses `s_zip::cloud::GCSZipWriter` + `AsyncStreamingZipWriter`
 
 ### Migration Guide
 ```rust
@@ -404,6 +474,8 @@ writer.save().await?;
 - PostgreSQL integration examples
 - Basic examples and documentation
 
+[0.15.0]: https://github.com/KSD-CO/excelstream/compare/v0.14.0...v0.15.0
+[0.14.0]: https://github.com/KSD-CO/excelstream/compare/v0.12.1...v0.14.0
 [0.2.2]: https://github.com/KSD-CO/excelstream/compare/v0.2.0...v0.2.2
 [0.2.0]: https://github.com/KSD-CO/excelstream/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/KSD-CO/excelstream/releases/tag/v0.1.0

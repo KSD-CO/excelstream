@@ -1,12 +1,12 @@
 [package]
 name = "excelstream"
-version = "0.14.0"
+version = "0.15.0"
 edition = "2021"
 authors = ["Ton That Vu <ttvuhm@gmail.com>"]
-description = "High-performance streaming Excel & CSV library with S3 cloud support - Read/write large XLSX/CSV files with ultra-low memory"
+description = "High-performance streaming Excel & CSV library with S3/GCS cloud support and Parquet conversion - Ultra-low memory usage"
 license = "MIT"
 repository = "https://github.com/KSD-CO/excelstream"
-keywords = ["excel", "xlsx", "csv", "streaming", "s3"]
+keywords = ["excel", "xlsx", "csv", "parquet", "streaming"]
 categories = ["parsing", "encoding"]
 exclude = [
     "*.xlsx",
@@ -27,7 +27,7 @@ indexmap = "2"
 chrono = { version = "0.4", features = ["clock"] }
 itoa = "1.0"
 # s-zip for streaming ZIP operations (with Zstd compression and cloud storage support)
-s-zip = { version = "0.5.1", default-features = false }
+s-zip = { version = "0.6.0", default-features = false }
 
 # Optional features (only enabled when needed)
 # PostgreSQL support (for examples)
@@ -39,10 +39,16 @@ tokio = { version = "1", features = ["full"], optional = true }
 # Cloud storage support
 aws-config = { version = "1.0", optional = true }
 aws-sdk-s3 = { version = "1.0", optional = true }
+google-cloud-storage = { version = "0.22", optional = true }
+google-cloud-auth = { version = "0.17", optional = true }
 tempfile = { version = "3.8", optional = true }
 
 # HTTP streaming support (for examples)
 axum = { version = "0.7", optional = true }
+
+# Parquet support
+parquet = { version = "57", optional = true, default-features = false, features = ["arrow", "snap", "zstd"] }
+arrow = { version = "57", optional = true, default-features = false, features = ["ipc"] }
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -55,9 +61,10 @@ parallel = ["dep:rayon"]
 postgres = ["dep:postgres"]
 postgres-async = ["dep:tokio-postgres", "dep:deadpool-postgres", "dep:tokio"]
 cloud-s3 = ["dep:aws-config", "dep:aws-sdk-s3", "dep:tokio", "dep:tempfile", "s-zip/cloud-s3"]
+cloud-gcs = ["dep:google-cloud-storage", "dep:google-cloud-auth", "dep:tokio", "dep:tempfile", "s-zip/cloud-gcs"]
 cloud-http = ["dep:axum", "dep:tokio", "dep:tempfile"]
-cloud-gcs = []  # Placeholder for future
 cloud-azure = []  # Placeholder for future
+parquet-support = ["dep:parquet", "dep:arrow"]
 
 [[bench]]
 name = "streaming_benchmark"
@@ -102,3 +109,33 @@ required-features = ["cloud-http"]
 name = "http_memory_test"
 path = "examples/http_memory_test.rs"
 required-features = ["cloud-http"]
+
+[[example]]
+name = "gcs_streaming"
+path = "examples/gcs_streaming.rs"
+required-features = ["cloud-gcs"]
+
+[[example]]
+name = "gcs_performance_test"
+path = "examples/gcs_performance_test.rs"
+required-features = ["cloud-gcs"]
+
+[[example]]
+name = "parquet_to_excel"
+path = "examples/parquet_to_excel.rs"
+required-features = ["parquet-support"]
+
+[[example]]
+name = "excel_to_parquet"
+path = "examples/excel_to_parquet.rs"
+required-features = ["parquet-support"]
+
+[[example]]
+name = "parquet_streaming"
+path = "examples/parquet_streaming.rs"
+required-features = ["parquet-support"]
+
+[[example]]
+name = "parquet_performance_test"
+path = "examples/parquet_performance_test.rs"
+required-features = ["parquet-support"]
