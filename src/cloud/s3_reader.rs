@@ -6,6 +6,9 @@
 use crate::error::{ExcelError, Result};
 use crate::streaming_reader::{RowIterator, RowStructIterator, StreamingReader};
 use aws_sdk_s3::error::ProvideErrorMetadata;
+use aws_sdk_s3::Client;
+use std::io::Write;
+use tokio::io::AsyncReadExt;
 
 /// S3 Excel reader that downloads from Amazon S3 and streams rows
 ///
@@ -49,10 +52,8 @@ pub struct S3ExcelReader {
     bucket: String,
     key: String,
     _region: String,
-    _s3_client: Option<aws_sdk_s3::Client>,
-    /// Temp file - must keep alive to prevent deletion
+    _s3_client: Option<Client>,
     _temp_file: Option<tempfile::NamedTempFile>,
-    /// Underlying streaming reader
     streaming_reader: Option<StreamingReader>,
 }
 
@@ -342,7 +343,6 @@ impl S3ExcelReaderBuilder {
     ///     .await?;
     /// ```
     pub async fn build(self) -> Result<S3ExcelReader> {
-        // 1. Validate required fields
         let bucket = self
             .bucket
             .ok_or_else(|| ExcelError::InvalidState("Bucket name required".to_string()))?;
@@ -353,14 +353,12 @@ impl S3ExcelReaderBuilder {
 
         let region_str = self.region.unwrap_or_else(|| "us-east-1".to_string());
 
-        // 2. Initialize AWS SDK with custom endpoint if provided
         let region_provider = aws_sdk_s3::config::Region::new(region_str.clone());
         let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
             .region(region_provider)
             .load()
             .await;
 
-        // Build S3 client with optional endpoint URL and path style
         let mut s3_config_builder = aws_sdk_s3::config::Builder::from(&sdk_config);
 
         if let Some(endpoint) = &self.endpoint_url {
@@ -371,17 +369,38 @@ impl S3ExcelReaderBuilder {
             s3_config_builder = s3_config_builder.force_path_style(true);
         }
 
-        let s3_client = aws_sdk_s3::Client::from_conf(s3_config_builder.build());
+        let s3_client = Client::from_conf(s3_config_builder.build());
 
-        // 3. Download file from S3
-        let get_object_output = s3_client
+        Self::build_reader_from_client(s3_client, bucket, key, region_str).await
+    }
+
+    /// Build S3ExcelReader with a custom pre-configured AWS S3 client
+    pub async fn build_with_client(self, s3_client: Client) -> Result<S3ExcelReader> {
+        let bucket = self
+            .bucket
+            .ok_or_else(|| ExcelError::InvalidState("Bucket name required".to_string()))?;
+
+        let key = self
+            .key
+            .ok_or_else(|| ExcelError::InvalidState("Object key required".to_string()))?;
+
+        let region_str = self.region.unwrap_or_else(|| "us-east-1".to_string());
+
+        Self::build_reader_from_client(s3_client, bucket, key, region_str).await
+    }
+
+    async fn download_from_s3(
+        client: &Client,
+        bucket: &str,
+        key: &str,
+    ) -> Result<aws_sdk_s3::operation::get_object::GetObjectOutput> {
+        client
             .get_object()
-            .bucket(&bucket)
-            .key(&key)
+            .bucket(bucket)
+            .key(key)
             .send()
             .await
             .map_err(|e| {
-                // Map specific S3 errors by checking error code
                 let error_code = e.code().unwrap_or("");
                 let error_message = e.message().unwrap_or("Unknown error");
 
@@ -399,43 +418,46 @@ impl S3ExcelReaderBuilder {
                         error_code, error_message
                     )),
                 }
-            })?;
+            })
+    }
 
-        // 4. Download S3 body to memory buffer first
+    async fn create_reader_from_s3_response(
+        get_object_output: aws_sdk_s3::operation::get_object::GetObjectOutput,
+    ) -> Result<(tempfile::NamedTempFile, StreamingReader)> {
         let mut body = get_object_output.body.into_async_read();
         let mut buffer = Vec::new();
 
-        use tokio::io::AsyncReadExt;
         body.read_to_end(&mut buffer)
             .await
             .map_err(ExcelError::IoError)?;
 
-        let bytes_written = buffer.len() as u64;
-
-        // 5. Write buffer to temp file (synchronous)
         let mut temp_file = tempfile::NamedTempFile::new().map_err(ExcelError::IoError)?;
 
-        use std::io::Write;
         temp_file.write_all(&buffer).map_err(ExcelError::IoError)?;
         temp_file.flush().map_err(ExcelError::IoError)?;
 
-        println!(
-            "📥 Downloaded {:.2} MB from s3://{}/{}",
-            bytes_written as f64 / (1024.0 * 1024.0),
-            bucket,
-            key
-        );
-
-        // 6. Open StreamingReader from temp file
         let temp_path = temp_file.path().to_path_buf();
         let streaming_reader = StreamingReader::open(&temp_path)?;
+
+        Ok((temp_file, streaming_reader))
+    }
+
+    async fn build_reader_from_client(
+        s3_client: Client,
+        bucket: String,
+        key: String,
+        region_str: String,
+    ) -> Result<S3ExcelReader> {
+        let get_object_output = Self::download_from_s3(&s3_client, &bucket, &key).await?;
+        let (temp_file, streaming_reader) =
+            Self::create_reader_from_s3_response(get_object_output).await?;
 
         Ok(S3ExcelReader {
             bucket,
             key,
             _region: region_str,
             _s3_client: Some(s3_client),
-            _temp_file: Some(temp_file), // Keep alive until S3ExcelReader is dropped
+            _temp_file: Some(temp_file),
             streaming_reader: Some(streaming_reader),
         })
     }
@@ -444,6 +466,8 @@ impl S3ExcelReaderBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aws_config::BehaviorVersion;
+    use aws_sdk_s3::config::Region;
 
     #[test]
     fn test_builder_validation_missing_bucket() {
@@ -485,5 +509,22 @@ mod tests {
         assert_eq!(builder.bucket, Some("my-bucket".to_string()));
         assert_eq!(builder.key, Some("path/to/file.xlsx".to_string()));
         assert_eq!(builder.region, Some("ap-southeast-1".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_build_with_client() {
+        let config = aws_config::defaults(BehaviorVersion::latest())
+            .region(Region::new("us-west-2"))
+            .load()
+            .await;
+        let client = Client::new(&config);
+
+        let result = S3ExcelReaderBuilder::default()
+            .bucket("test-bucket")
+            .key("test.xlsx")
+            .build_with_client(client)
+            .await;
+
+        assert!(result.is_err());
     }
 }

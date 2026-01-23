@@ -5,6 +5,7 @@
 
 use crate::error::{ExcelError, Result};
 use crate::types::{CellStyle, CellValue};
+use aws_sdk_s3::Client;
 
 #[cfg(feature = "cloud-s3")]
 use s_zip::cloud::S3ZipWriter;
@@ -598,18 +599,15 @@ impl S3ExcelWriterBuilder {
             .ok_or_else(|| ExcelError::InvalidState("Object key required".to_string()))?;
         let region = self.region.unwrap_or_else(|| "us-east-1".to_string());
 
-        // Build S3 writer using s-zip builder API
         let mut builder = S3ZipWriter::builder()
             .region(&region)
             .bucket(&bucket)
             .key(&key);
 
-        // Set custom endpoint for S3-compatible services (MinIO, R2, etc.)
         if let Some(endpoint) = &self.endpoint_url {
             builder = builder.endpoint_url(endpoint);
         }
 
-        // Force path-style addressing (required for MinIO)
         if self.force_path_style {
             builder = builder.force_path_style(true);
         }
@@ -619,7 +617,47 @@ impl S3ExcelWriterBuilder {
             .await
             .map_err(|e| ExcelError::IoError(std::io::Error::other(e.to_string())))?;
 
-        // Wrap in AsyncStreamingZipWriter
+        Self::create_writer_from_s3_writer(s3_writer)
+    }
+
+    #[cfg(not(feature = "cloud-s3"))]
+    pub async fn build(self) -> Result<S3ExcelWriter> {
+        Err(ExcelError::InvalidState(
+            "cloud-s3 feature not enabled".to_string(),
+        ))
+    }
+
+    #[cfg(feature = "cloud-s3")]
+    pub async fn build_with_client(self, client: Client) -> Result<S3ExcelWriter> {
+        let bucket = self
+            .bucket
+            .ok_or_else(|| ExcelError::InvalidState("Bucket name required".to_string()))?;
+        let key = self
+            .key
+            .ok_or_else(|| ExcelError::InvalidState("Object key required".to_string()))?;
+        let region = self.region.unwrap_or_else(|| "us-east-1".to_string());
+
+        let s3_writer = S3ZipWriter::builder()
+            .client(client)
+            .region(&region)
+            .bucket(&bucket)
+            .key(&key)
+            .build()
+            .await
+            .map_err(|e| ExcelError::IoError(std::io::Error::other(e.to_string())))?;
+
+        Self::create_writer_from_s3_writer(s3_writer)
+    }
+
+    #[cfg(not(feature = "cloud-s3"))]
+    pub async fn build_with_client(self, _client: Client) -> Result<S3ExcelWriter> {
+        Err(ExcelError::InvalidState(
+            "cloud-s3 feature not enabled".to_string(),
+        ))
+    }
+
+    #[cfg(feature = "cloud-s3")]
+    fn create_writer_from_s3_writer(s3_writer: S3ZipWriter) -> Result<S3ExcelWriter> {
         let zip_writer = AsyncStreamingZipWriter::from_writer(s3_writer);
 
         Ok(S3ExcelWriter {
@@ -631,12 +669,5 @@ impl S3ExcelWriterBuilder {
             worksheets: Vec::new(),
             in_worksheet: false,
         })
-    }
-
-    #[cfg(not(feature = "cloud-s3"))]
-    pub async fn build(self) -> Result<S3ExcelWriter> {
-        Err(ExcelError::InvalidState(
-            "cloud-s3 feature not enabled".to_string(),
-        ))
     }
 }
