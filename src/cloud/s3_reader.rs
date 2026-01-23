@@ -5,9 +5,14 @@
 
 use crate::error::{ExcelError, Result};
 use crate::streaming_reader::{RowIterator, RowStructIterator, StreamingReader};
+
+#[cfg(feature = "cloud-s3")]
 use aws_sdk_s3::error::ProvideErrorMetadata;
+#[cfg(feature = "cloud-s3")]
 use aws_sdk_s3::Client;
+#[cfg(feature = "cloud-s3")]
 use std::io::Write;
+#[cfg(feature = "cloud-s3")]
 use tokio::io::AsyncReadExt;
 
 /// S3 Excel reader that downloads from Amazon S3 and streams rows
@@ -342,6 +347,7 @@ impl S3ExcelReaderBuilder {
     ///     .build()
     ///     .await?;
     /// ```
+    #[cfg(feature = "cloud-s3")]
     pub async fn build(self) -> Result<S3ExcelReader> {
         let bucket = self
             .bucket
@@ -374,7 +380,15 @@ impl S3ExcelReaderBuilder {
         Self::build_reader_from_client(s3_client, bucket, key, region_str).await
     }
 
+    #[cfg(not(feature = "cloud-s3"))]
+    pub async fn build(self) -> Result<S3ExcelReader> {
+        Err(ExcelError::InvalidState(
+            "cloud-s3 feature not enabled".to_string(),
+        ))
+    }
+
     /// Build S3ExcelReader with a custom pre-configured AWS S3 client
+    #[cfg(feature = "cloud-s3")]
     pub async fn build_with_client(self, s3_client: Client) -> Result<S3ExcelReader> {
         let bucket = self
             .bucket
@@ -389,6 +403,14 @@ impl S3ExcelReaderBuilder {
         Self::build_reader_from_client(s3_client, bucket, key, region_str).await
     }
 
+    #[cfg(not(feature = "cloud-s3"))]
+    pub async fn build_with_client(self, _s3_client: Client) -> Result<S3ExcelReader> {
+        Err(ExcelError::InvalidState(
+            "cloud-s3 feature not enabled".to_string(),
+        ))
+    }
+
+    #[cfg(feature = "cloud-s3")]
     async fn download_from_s3(
         client: &Client,
         bucket: &str,
@@ -421,6 +443,7 @@ impl S3ExcelReaderBuilder {
             })
     }
 
+    #[cfg(feature = "cloud-s3")]
     async fn create_reader_from_s3_response(
         get_object_output: aws_sdk_s3::operation::get_object::GetObjectOutput,
     ) -> Result<(tempfile::NamedTempFile, StreamingReader)> {
@@ -442,6 +465,7 @@ impl S3ExcelReaderBuilder {
         Ok((temp_file, streaming_reader))
     }
 
+    #[cfg(feature = "cloud-s3")]
     async fn build_reader_from_client(
         s3_client: Client,
         bucket: String,
