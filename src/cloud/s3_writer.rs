@@ -7,6 +7,8 @@ use crate::error::{ExcelError, Result};
 use crate::types::{CellStyle, CellValue};
 
 #[cfg(feature = "cloud-s3")]
+use aws_sdk_s3::Client;
+#[cfg(feature = "cloud-s3")]
 use s_zip::cloud::S3ZipWriter;
 #[cfg(feature = "cloud-s3")]
 use s_zip::AsyncStreamingZipWriter;
@@ -44,6 +46,19 @@ pub struct S3ExcelWriter {
     worksheet_count: u32,
     worksheets: Vec<String>,
     in_worksheet: bool,
+}
+
+impl std::fmt::Debug for S3ExcelWriter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("S3ExcelWriter")
+            .field("current_row", &self.current_row)
+            .field("max_col", &self.max_col)
+            .field("worksheet_count", &self.worksheet_count)
+            .field("worksheets", &self.worksheets)
+            .field("in_worksheet", &self.in_worksheet)
+            .field("has_zip_writer", &self.zip_writer.is_some())
+            .finish()
+    }
 }
 
 impl S3ExcelWriter {
@@ -107,7 +122,6 @@ impl S3ExcelWriter {
 
     /// Add a new worksheet
     async fn add_worksheet(&mut self, name: &str) -> Result<()> {
-        // Finish previous worksheet if any
         if self.in_worksheet {
             self.finish_current_worksheet().await?;
         }
@@ -117,7 +131,6 @@ impl S3ExcelWriter {
         self.current_row = 0;
         self.max_col = 0;
 
-        // Start new worksheet entry in ZIP
         let entry_name = format!("xl/worksheets/sheet{}.xml", self.worksheet_count);
         self.zip_writer
             .as_mut()
@@ -126,7 +139,6 @@ impl S3ExcelWriter {
             .await
             .map_err(|e| ExcelError::IoError(std::io::Error::other(e.to_string())))?;
 
-        // Write worksheet XML header
         let header = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <sheetData>"#;
@@ -147,7 +159,6 @@ impl S3ExcelWriter {
             return Ok(());
         }
 
-        // Close sheetData and worksheet tags
         let footer = "</sheetData></worksheet>";
         self.zip_writer
             .as_mut()
@@ -193,7 +204,6 @@ impl S3ExcelWriter {
         let values: Vec<String> = row.into_iter().map(|s| s.as_ref().to_string()).collect();
         self.max_col = self.max_col.max(values.len() as u32);
 
-        // Build row XML in buffer
         self.xml_buffer.clear();
         self.xml_buffer.extend_from_slice(b"<row r=\"");
         self.xml_buffer
@@ -219,7 +229,6 @@ impl S3ExcelWriter {
 
         self.xml_buffer.extend_from_slice(b"</row>");
 
-        // Stream to S3 immediately
         self.zip_writer
             .as_mut()
             .unwrap()
@@ -247,7 +256,6 @@ impl S3ExcelWriter {
         self.current_row += 1;
         self.max_col = self.max_col.max(cells.len() as u32);
 
-        // Build row XML in buffer
         self.xml_buffer.clear();
         self.xml_buffer.extend_from_slice(b"<row r=\"");
         self.xml_buffer
@@ -265,7 +273,6 @@ impl S3ExcelWriter {
                 .extend_from_slice(self.current_row.to_string().as_bytes());
             self.xml_buffer.extend_from_slice(b"\"");
 
-            // Add style attribute if not default
             if style_id > 0 {
                 self.xml_buffer.extend_from_slice(b" s=\"");
                 self.xml_buffer
@@ -273,7 +280,6 @@ impl S3ExcelWriter {
                 self.xml_buffer.extend_from_slice(b"\"");
             }
 
-            // Write cell value based on type
             match value {
                 CellValue::Empty => {
                     self.xml_buffer.extend_from_slice(b"/>");
@@ -320,7 +326,6 @@ impl S3ExcelWriter {
 
         self.xml_buffer.extend_from_slice(b"</row>");
 
-        // Stream to S3 immediately
         self.zip_writer
             .as_mut()
             .unwrap()
@@ -333,17 +338,14 @@ impl S3ExcelWriter {
 
     /// Save and upload Excel file to S3 (streaming, no temp files!)
     pub async fn save(mut self) -> Result<()> {
-        // Finish current worksheet
         self.finish_current_worksheet().await?;
 
-        // Write all required Excel files
         self.write_content_types().await?;
         self.write_rels().await?;
         self.write_workbook().await?;
         self.write_workbook_rels().await?;
         self.write_styles().await?;
 
-        // Finish ZIP - this completes the S3 multipart upload
         let zip_writer = self
             .zip_writer
             .take()
@@ -644,18 +646,15 @@ impl S3ExcelWriterBuilder {
             .ok_or_else(|| ExcelError::InvalidState("Object key required".to_string()))?;
         let region = self.region.unwrap_or_else(|| "us-east-1".to_string());
 
-        // Build S3 writer using s-zip builder API
         let mut builder = S3ZipWriter::builder()
             .region(&region)
             .bucket(&bucket)
             .key(&key);
 
-        // Set custom endpoint for S3-compatible services (MinIO, R2, etc.)
         if let Some(endpoint) = &self.endpoint_url {
             builder = builder.endpoint_url(endpoint);
         }
 
-        // Force path-style addressing (required for MinIO)
         if self.force_path_style {
             builder = builder.force_path_style(true);
         }
@@ -671,7 +670,47 @@ impl S3ExcelWriterBuilder {
             .await
             .map_err(|e| ExcelError::IoError(std::io::Error::other(e.to_string())))?;
 
-        // Wrap in AsyncStreamingZipWriter
+        Self::create_writer_from_s3_writer(s3_writer)
+    }
+
+    #[cfg(not(feature = "cloud-s3"))]
+    pub async fn build(self) -> Result<S3ExcelWriter> {
+        Err(ExcelError::InvalidState(
+            "cloud-s3 feature not enabled".to_string(),
+        ))
+    }
+
+    #[cfg(feature = "cloud-s3")]
+    pub async fn build_with_client(self, client: Client) -> Result<S3ExcelWriter> {
+        let bucket = self
+            .bucket
+            .ok_or_else(|| ExcelError::InvalidState("Bucket name required".to_string()))?;
+        let key = self
+            .key
+            .ok_or_else(|| ExcelError::InvalidState("Object key required".to_string()))?;
+        let region = self.region.unwrap_or_else(|| "us-east-1".to_string());
+
+        let s3_writer = S3ZipWriter::builder()
+            .client(client)
+            .region(&region)
+            .bucket(&bucket)
+            .key(&key)
+            .build()
+            .await
+            .map_err(|e| ExcelError::IoError(std::io::Error::other(e.to_string())))?;
+
+        Self::create_writer_from_s3_writer(s3_writer)
+    }
+
+    #[cfg(not(feature = "cloud-s3"))]
+    pub async fn build_with_client(self, _client: Client) -> Result<S3ExcelWriter> {
+        Err(ExcelError::InvalidState(
+            "cloud-s3 feature not enabled".to_string(),
+        ))
+    }
+
+    #[cfg(feature = "cloud-s3")]
+    fn create_writer_from_s3_writer(s3_writer: S3ZipWriter) -> Result<S3ExcelWriter> {
         let zip_writer = AsyncStreamingZipWriter::from_writer(s3_writer);
 
         Ok(S3ExcelWriter {
@@ -684,11 +723,127 @@ impl S3ExcelWriterBuilder {
             in_worksheet: false,
         })
     }
+}
 
-    #[cfg(not(feature = "cloud-s3"))]
-    pub async fn build(self) -> Result<S3ExcelWriter> {
-        Err(ExcelError::InvalidState(
-            "cloud-s3 feature not enabled".to_string(),
-        ))
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_builder_validation_missing_bucket() {
+        let builder = S3ExcelWriterBuilder::default().key("test.xlsx");
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let result = rt.block_on(builder.build());
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Bucket name required"));
+    }
+
+    #[test]
+    fn test_builder_validation_missing_key() {
+        let builder = S3ExcelWriterBuilder::default().bucket("test-bucket");
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let result = rt.block_on(builder.build());
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Object key required"));
+    }
+
+    #[test]
+    fn test_default_region() {
+        let builder = S3ExcelWriterBuilder::default();
+        assert_eq!(builder.region, Some("us-east-1".to_string()));
+    }
+
+    #[test]
+    fn test_builder_methods() {
+        let builder = S3ExcelWriterBuilder::default()
+            .bucket("my-bucket")
+            .key("path/to/file.xlsx")
+            .region("ap-southeast-1")
+            .endpoint_url("http://localhost:9000")
+            .force_path_style(true);
+
+        assert_eq!(builder.bucket, Some("my-bucket".to_string()));
+        assert_eq!(builder.key, Some("path/to/file.xlsx".to_string()));
+        assert_eq!(builder.region, Some("ap-southeast-1".to_string()));
+        assert_eq!(
+            builder.endpoint_url,
+            Some("http://localhost:9000".to_string())
+        );
+        assert!(builder.force_path_style);
+    }
+
+    #[cfg(feature = "cloud-s3")]
+    #[tokio::test]
+    async fn test_build_with_client() {
+        use aws_config::BehaviorVersion;
+        use aws_sdk_s3::config::Region;
+
+        let config = aws_config::defaults(BehaviorVersion::latest())
+            .region(Region::new("us-west-2"))
+            .load()
+            .await;
+        let client = Client::new(&config);
+
+        let result = S3ExcelWriterBuilder::default()
+            .bucket("test-bucket")
+            .key("test.xlsx")
+            .build_with_client(client)
+            .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[cfg(feature = "cloud-s3")]
+    #[tokio::test]
+    async fn test_build_with_client_missing_bucket() {
+        use aws_config::BehaviorVersion;
+        use aws_sdk_s3::config::Region;
+
+        let config = aws_config::defaults(BehaviorVersion::latest())
+            .region(Region::new("us-west-2"))
+            .load()
+            .await;
+        let client = Client::new(&config);
+
+        let result = S3ExcelWriterBuilder::default()
+            .key("test.xlsx")
+            .build_with_client(client)
+            .await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Bucket name required"));
+    }
+
+    #[cfg(feature = "cloud-s3")]
+    #[tokio::test]
+    async fn test_build_with_client_missing_key() {
+        use aws_config::BehaviorVersion;
+        use aws_sdk_s3::config::Region;
+
+        let config = aws_config::defaults(BehaviorVersion::latest())
+            .region(Region::new("us-west-2"))
+            .load()
+            .await;
+        let client = Client::new(&config);
+
+        let result = S3ExcelWriterBuilder::default()
+            .bucket("test-bucket")
+            .build_with_client(client)
+            .await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Object key required"));
     }
 }
