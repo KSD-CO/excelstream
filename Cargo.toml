@@ -1,6 +1,6 @@
 [package]
 name = "excelstream"
-version = "0.17.1"
+version = "0.18.0"
 edition = "2021"
 authors = ["Ton That Vu <ttvuhm@gmail.com>"]
 description = "High-performance streaming Excel & CSV library with S3/GCS cloud support and Parquet conversion - Ultra-low memory usage"

@@ -5,6 +5,76 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0] - 2026-01-26
+
+### 🎉 Major Features
+
+**Cloud-to-Cloud Replication** - Transfer Excel files between different cloud storage services with true streaming!
+
+### Added
+- **CloudReplicate** - Direct cloud-to-cloud transfer without local disk
+  - `CloudReplicate::new()` - Auto-generated clients from env vars
+  - `CloudReplicate::with_clients()` - Custom clients with different credentials
+  - `CloudReplicate::with_source_client()` - Only source client customized
+  - `CloudReplicate::with_dest_client()` - Only destination client customized
+  - `CloudReplicateBuilder` - Flexible builder pattern
+
+- **ReplicateConfig** - Configuration for transfer
+  - Configurable chunk size (default 5MB)
+  - Configurable retry count (default 3)
+  - Support for different regions and endpoints
+
+- **ReplicateStats** - Transfer statistics
+  - Bytes transferred tracking
+  - Chunks transferred count
+  - Transfer speed calculation (MB/s)
+  - Elapsed time measurement
+  - Error tracking
+
+- **Optimized Transfer Strategies**
+  - **Same-region copies**: Uses native S3 copy_object API (server-side, instant)
+  - **Cross-region/cross-endpoint**: Streaming multipart upload (constant ~5-10MB memory)
+  - Zero memory peaks with lazy ByteStream evaluation
+
+- **Multi-Cloud Support**
+  - AWS S3 ↔ AWS S3 (different regions)
+  - AWS S3 ↔ MinIO
+  - AWS S3 ↔ Cloudflare R2
+  - AWS S3 ↔ DigitalOcean Spaces
+  - MinIO ↔ MinIO
+  - And any S3-compatible combination
+
+- **Examples**
+  - `examples/cloud_replicate.rs` - 5 complete examples
+    - Auto-generated clients
+    - Custom S3 clients with credentials
+    - Builder pattern with clients
+    - MinIO with different secrets
+    - DigitalOcean Spaces
+  - `examples/s3_excel_writer.rs` - 7 complete S3 writer examples
+    - Basic S3 write
+    - Custom clients
+    - Custom credentials
+    - MinIO support
+    - Typed data writing
+    - Cloudflare R2
+    - DigitalOcean Spaces
+
+### Performance
+- ✅ **Memory: Constant ~5-10MB** for any file size transfer
+- ✅ **Same-region**: Instant server-side copy (no data transfer)
+- ✅ **Cross-region**: Streaming multipart with configurable chunks
+- ✅ **Speed**: Transfer speed monitoring and reporting
+
+### Documentation
+- Added cloud_replicate.rs example with 5 use cases
+- Added s3_excel_writer.rs example with 7 use cases
+- Updated README.md with v0.18.0 features
+- Cloud replication architecture documented in code
+
+### Breaking Changes
+- None (fully backward compatible with v0.17.0)
+
 ## [0.17.0] - 2026-01-22
 
 ### 🎉 Major Features

@@ -65,6 +65,8 @@ pub mod gcs_writer;
 #[cfg(feature = "cloud-http")]
 pub mod http_writer;
 
+pub mod replicate;
+
 #[cfg(feature = "cloud-s3")]
 pub use s3_writer::S3ExcelWriter;
 

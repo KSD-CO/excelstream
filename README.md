@@ -16,35 +16,54 @@
 - 🗜️ **Parquet Conversion** - Stream Excel ↔ Parquet with constant memory
 - 🐳 **Production Ready** - Works in 256 MB containers
 
-## 🔥 What's New in v0.17.0
+## 🔥 What's New in v0.18.0
 
-**Multi-Cloud Explicit Credentials** - Upload to multiple S3-compatible clouds with different credentials!
+**Cloud Replication & Transfer** - Replicate Excel files between different cloud storage services!
 
 ```rust
-use excelstream::cloud::{S3ExcelWriter, S3ExcelReader};
-use s_zip::cloud::S3ZipWriter;
-use aws_sdk_s3::{Client, config::Credentials};
+use excelstream::cloud::replicate::{CloudReplicate, ReplicateConfig, CloudSource, CloudDestination, CloudProvider};
+use aws_sdk_s3::config::Credentials;
 
-// Create clients with different credentials for each cloud
-let aws_client = Client::from_conf(aws_config);
-let minio_client = Client::from_conf(minio_config);
+// Setup custom clients with different credentials
+let source_creds = Credentials::new("source-key", "source-secret", None, None, "source");
+let dest_creds = Credentials::new("dest-key", "dest-secret", None, None, "dest");
 
-// Upload to multiple clouds simultaneously
-let s3_writer = S3ZipWriter::new(aws_client, "bucket", "file.xlsx").await?;
-let mut writer = S3ExcelWriter::from_s3_writer(s3_writer);
-writer.write_header_bold(["Name", "Value"]).await?;
-writer.save().await?;
+let source = CloudSource {
+    provider: CloudProvider::S3,
+    bucket: "production-bucket".to_string(),
+    key: "reports/data.xlsx".to_string(),
+    region: Some("us-east-1".to_string()),
+    endpoint_url: None,
+};
+
+let destination = CloudDestination {
+    provider: CloudProvider::S3,
+    bucket: "backup-bucket".to_string(),
+    key: "backups/data-backup.xlsx".to_string(),
+    region: Some("us-west-2".to_string()),
+    endpoint_url: None,
+};
+
+let config = ReplicateConfig::new(source, destination)
+    .with_chunk_size(10 * 1024 * 1024); // 10MB chunks
+
+let replicate = CloudReplicate::with_clients(config, source_client, dest_client);
+let stats = replicate.execute().await?;
+
+println!("Transferred: {} bytes at {:.2} MB/s", stats.bytes_transferred, stats.speed_mbps());
 ```
 
 **Features:**
-- 🔑 **Explicit credentials** - No environment variables needed
-- 🌍 **Multi-cloud support** - AWS, MinIO, R2, Spaces, B2
-- 🚀 **True streaming** - Only 19-20 MB memory for 100K rows
-- ⚡ **Concurrent uploads** - Upload to multiple clouds simultaneously
+- 🔄 **Cloud-to-Cloud Transfer** - Replicate between S3, MinIO, R2, DO Spaces
+- ⚡ **True Streaming** - Constant memory usage (~5-10MB), no memory peaks
+- 🚀 **Server-side Copy** - Same-region transfers use native S3 copy API (instant)
+- 🔑 **Different Credentials** - Each cloud can have different API keys
+- 📊 **Transfer Stats** - Speed (MB/s), duration, bytes transferred
+- 🏗️ **Builder Pattern** - Flexible configuration with custom clients
 
-**Also includes:** Parquet support from v0.16.0 (Excel ↔ Parquet streaming)
+**Also includes:** v0.17.0 Multi-Cloud Explicit Credentials + v0.16.0 Parquet Support
 
-[See full changelog](CHANGELOG.md) | [Multi-cloud guide →](MULTI_CLOUD_CONFIG.md)
+[See full changelog](CHANGELOG.md) | [Multi-cloud guide →](MULTI_CLOUD_CONFIG.md) | [Cloud Replication →](examples/cloud_replicate.rs)
 
 ---
 
@@ -54,12 +73,12 @@ writer.save().await?;
 
 ```toml
 [dependencies]
-excelstream = "0.17"
+excelstream = "0.18"
 
 # Optional features
-excelstream = { version = "0.17", features = ["cloud-s3"] }        # S3 support
-excelstream = { version = "0.17", features = ["cloud-gcs"] }       # GCS support
-excelstream = { version = "0.17", features = ["parquet-support"] } # Parquet conversion
+excelstream = { version = "0.18", features = ["cloud-s3"] }        # S3 support
+excelstream = { version = "0.18", features = ["cloud-gcs"] }       # GCS support
+excelstream = { version = "0.18", features = ["parquet-support"] } # Parquet conversion
 ```
 
 ### Write Excel (Local)
