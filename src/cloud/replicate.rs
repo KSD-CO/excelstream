@@ -19,7 +19,7 @@ pub enum CloudProvider {
 }
 
 /// Source cloud configuration
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CloudSource {
     pub provider: CloudProvider,
     pub bucket: String,
@@ -29,7 +29,7 @@ pub struct CloudSource {
 }
 
 /// Destination cloud configuration
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CloudDestination {
     pub provider: CloudProvider,
     pub bucket: String,
@@ -39,6 +39,7 @@ pub struct CloudDestination {
 }
 
 /// Cloud-to-Cloud replicate configuration
+#[derive(Debug)]
 pub struct ReplicateConfig {
     pub source: CloudSource,
     pub destination: CloudDestination,
@@ -97,6 +98,7 @@ impl ReplicateStats {
 }
 
 /// Cloud-to-Cloud replicate handler
+#[derive(Debug)]
 pub struct CloudReplicate {
     config: ReplicateConfig,
     stats: Arc<tokio::sync::Mutex<ReplicateStats>>,
@@ -186,7 +188,7 @@ impl CloudReplicate {
     /// # Example
     ///
     /// ```no_run
-    /// use excelstream::cloud::backup::{CloudReplicate, ReplicateConfig, CloudSource, CloudDestination, CloudProvider};
+    /// use excelstream::cloud::replicate::{CloudReplicate, ReplicateConfig, CloudSource, CloudDestination, CloudProvider};
     ///
     /// #[tokio::main]
     /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -198,7 +200,7 @@ impl CloudReplicate {
     ///         endpoint_url: None,
     ///     };
     ///
-    ///     let destination = CloudSource {
+    ///     let destination = CloudDestination {
     ///         provider: CloudProvider::S3,
     ///         bucket: "backup-bucket".to_string(),
     ///         key: "backups/file-2024.xlsx".to_string(),
@@ -210,15 +212,17 @@ impl CloudReplicate {
     ///         .with_chunk_size(10 * 1024 * 1024); // 10MB chunks
     ///
     ///     let replicate = CloudReplicate::new(config);
-    ///     let stats = backup.execute().await?;
+    ///     let stats = replicate.execute().await?;
     ///
     ///     println!("Transferred: {} bytes", stats.bytes_transferred);
     ///     println!("Speed: {:.2} MB/s", stats.speed_mbps());
     ///     Ok(())
     /// }
     /// ```
+    /// ```
     #[cfg(feature = "cloud-s3")]
     pub async fn execute(&self) -> Result<ReplicateStats> {
+        #[allow(unreachable_patterns)]
         match (
             &self.config.source.provider,
             &self.config.destination.provider,
