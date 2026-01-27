@@ -371,7 +371,7 @@ impl CloudReplicate {
             let chunk_size = (self.config.chunk_size as u64).min(file_size - offset);
             let range = format!("bytes={}-{}", offset, offset + chunk_size - 1);
 
-            // Get chunk stream from source (lazy evaluation, not loaded yet)
+            // Get chunk stream from source
             let response = source_client
                 .get_object()
                 .bucket(&self.config.source.bucket)
@@ -381,17 +381,24 @@ impl CloudReplicate {
                 .await
                 .map_err(|e| ExcelError::IoError(std::io::Error::other(e.to_string())))?;
 
-            // ByteStream is lazy - data streams directly to destination without buffering
+            // Collect ByteStream into Vec<u8> for proper checksum calculation
+            // This is necessary for S3-compatible services (MinIO, FPT Cloud, etc.)
+            // that strictly validate x-amz-content-sha256 header
             let byte_stream = response.body;
+            let chunk_bytes = byte_stream
+                .collect()
+                .await
+                .map_err(|e| ExcelError::IoError(std::io::Error::other(e.to_string())))?
+                .into_bytes();
 
-            // Upload chunk with streaming body (no memory peak!)
+            // Upload chunk - SDK can now calculate checksum properly
             let part_response = dest_client
                 .upload_part()
                 .bucket(&self.config.destination.bucket)
                 .key(&self.config.destination.key)
                 .upload_id(&upload_id)
                 .part_number(part_number as i32)
-                .body(byte_stream)
+                .body(chunk_bytes.to_vec().into())
                 .send()
                 .await
                 .map_err(|e| ExcelError::IoError(std::io::Error::other(e.to_string())))?;
