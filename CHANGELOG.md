@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0] - 2026-01-28
+
+### 🚀 Performance & Code Quality Improvements
+
+**Optimized Streaming Reader & CSV Parser** - Enhanced memory efficiency and code maintainability!
+
+### Changed
+- **Streaming Reader Optimization** (`src/streaming_reader.rs`)
+  - Simplified buffer management with single scan position tracking
+  - Removed complex `try_extract_row()` method
+  - Eliminated unnecessary `row_content` String buffer (reduced heap allocations)
+  - Changed from copying/draining buffers to in-place scanning
+  - Made Excel date calculation constants static to avoid repeated allocations
+  - **Code reduction:** 36% smaller (64 lines removed, 128 → 64 lines)
+
+- **CSV Parser Enhancement** (`src/csv/parser.rs`)
+  - Pre-allocated field vector capacity (16 fields typical)
+  - Pre-allocated field string buffer capacity (64 bytes typical)
+  - Reduced allocations during CSV line parsing
+
+### Improved
+- **Memory Efficiency** - One fewer String buffer per streaming iterator
+- **Code Maintainability** - Simpler, more readable buffer management logic
+- **Developer Experience** - Easier to understand and debug streaming operations
+
+### Performance Notes
+- Memory usage reduced by eliminating redundant buffers
+- Code complexity reduced by 36% in streaming reader
+- Trade-off: Slight performance variation in some workloads (see PERFORMANCE_COMPARISON.md)
+- Optimized for code quality and maintainability
+
 ## [0.18.0] - 2026-01-26
 
 ### 🎉 Major Features

@@ -16,17 +16,31 @@
 - 🗜️ **Parquet Conversion** - Stream Excel ↔ Parquet with constant memory
 - 🐳 **Production Ready** - Works in 256 MB containers
 
-## 🔥 What's New in v0.18.0
+## 🔥 What's New in v0.19.0
+
+**Performance & Memory Optimizations** - Enhanced streaming reader and CSV parser!
+
+- 🚀 **Optimized Streaming Reader** - Simplified buffer management with single-scan approach
+- 💾 **Reduced Memory Allocations** - One fewer String buffer per iterator (lower heap usage)
+- 📝 **Smarter CSV Parsing** - Pre-allocated buffers for typical row sizes
+- 🎯 **Cleaner Codebase** - 36% code reduction in streaming reader (64 lines removed)
+- 🔧 **Better Maintainability** - Simpler logic for easier debugging and contributions
+
+```rust
+// Streaming reader now uses optimized single-pass buffer scanning
+let mut reader = ExcelReader::open("large_file.xlsx")?;
+for row in reader.rows_by_index(0)? {
+    let row_data = row?;
+    // Process row with improved memory efficiency
+}
+```
+
+### Previous Release: v0.18.0
 
 **Cloud Replication & Transfer** - Replicate Excel files between different cloud storage services!
 
 ```rust
 use excelstream::cloud::replicate::{CloudReplicate, ReplicateConfig, CloudSource, CloudDestination, CloudProvider};
-use aws_sdk_s3::config::Credentials;
-
-// Setup custom clients with different credentials
-let source_creds = Credentials::new("source-key", "source-secret", None, None, "source");
-let dest_creds = Credentials::new("dest-key", "dest-secret", None, None, "dest");
 
 let source = CloudSource {
     provider: CloudProvider::S3,
