@@ -17,8 +17,8 @@ impl CsvParser {
 
     /// Parse CSV line into fields
     pub fn parse_line(&self, line: &str) -> Vec<String> {
-        let mut fields = Vec::new();
-        let mut current_field = String::new();
+        let mut fields = Vec::with_capacity(16); // Pre-allocate for typical row size
+        let mut current_field = String::with_capacity(64);
         let mut in_quotes = false;
         let mut chars = line.chars().peekable();
 

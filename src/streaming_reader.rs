@@ -89,10 +89,13 @@ fn parse_excel_date(serial: f64) -> String {
     }
 
     // Calculate month and day from remaining days
+    const DAYS_IN_MONTHS_LEAP: [i32; 12] = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    const DAYS_IN_MONTHS_COMMON: [i32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
     let days_in_months = if is_leap_year(year) {
-        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        &DAYS_IN_MONTHS_LEAP
     } else {
-        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        &DAYS_IN_MONTHS_COMMON
     };
 
     let mut month = 1;
@@ -317,8 +320,7 @@ impl StreamingReader {
             reader: BufReader::with_capacity(64 * 1024, reader), // 64KB buffer
             sst: &self.sst,
             buffer: String::with_capacity(128 * 1024), // 128KB for XML parsing
-            in_row: false,
-            row_content: String::with_capacity(8 * 1024), // 8KB per row
+            pos: 0,
         })
     }
 
@@ -507,9 +509,8 @@ impl StreamingReader {
 pub struct RowIterator<'a> {
     reader: BufReader<Box<dyn Read + 'a>>,
     sst: &'a [String],
-    buffer: String,      // Buffer for reading XML chunks
-    in_row: bool,        // Whether we're currently inside a <row> tag
-    row_content: String, // Buffer for accumulating current row XML
+    buffer: String, // Buffer for reading XML chunks
+    pos: usize,     // Current scan position in buffer
 }
 
 impl<'a> Iterator for RowIterator<'a> {
@@ -517,36 +518,57 @@ impl<'a> Iterator for RowIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            // Try to find complete <row>...</row> in current buffer
-            if let Some(row) = self.try_extract_row() {
-                return Some(Ok(row));
+            // Try to find row in current buffer
+            let search_slice = &self.buffer[self.pos..];
+            if let Some(start_idx) = search_slice.find("<row") {
+                let row_start = self.pos + start_idx;
+                // Check if we have the end of the row
+                if let Some(end_idx) = self.buffer[row_start..].find("</row>") {
+                    let row_end = row_start + end_idx + 6; // + length of </row>
+
+                    let row_xml = &self.buffer[row_start..row_end];
+                    let result = Self::parse_row(row_xml, self.sst);
+
+                    // Advance position
+                    self.pos = row_end;
+                    return Some(result);
+                }
             }
 
-            // Need more data - read next chunk
-            let mut chunk = vec![0u8; 32 * 1024]; // 32KB chunks
+            // If we are here, either no row found, or incomplete row at end
+            // We need to read more data.
+            // First, compact the buffer if needed (move valid tail to front)
+            if self.pos > 0 {
+                // If we consumed everything, just clear
+                if self.pos >= self.buffer.len() {
+                    self.buffer.clear();
+                } else {
+                    // We have some data left (incomplete row), move it to front
+                    self.buffer.drain(..self.pos);
+                }
+                self.pos = 0;
+            }
+
+            // Read next chunk
+            let mut chunk = vec![0u8; 32 * 1024];
             match self.reader.read(&mut chunk) {
                 Ok(0) => {
-                    // EOF reached
-                    if !self.row_content.is_empty() {
-                        // Parse any remaining incomplete row
-                        if let Ok(row) = Self::parse_row(&self.row_content, self.sst) {
-                            self.row_content.clear();
-                            return Some(Ok(row));
-                        }
+                    // EOF
+                    if !self.buffer.is_empty() {
+                        self.buffer.clear();
                     }
                     return None;
                 }
                 Ok(n) => {
-                    // Append new data to buffer
-                    if let Ok(s) = std::str::from_utf8(&chunk[..n]) {
-                        self.buffer.push_str(s);
-                    }
+                    // Append data. Use lossy utf8 conversion to be safe
+                    let s = String::from_utf8_lossy(&chunk[..n]);
+                    self.buffer.push_str(&s);
                 }
                 Err(e) => {
                     return Some(Err(ExcelError::ReadError(format!(
                         "Failed to read XML: {}",
                         e
-                    ))));
+                    ))))
                 }
             }
         }
@@ -554,64 +576,6 @@ impl<'a> Iterator for RowIterator<'a> {
 }
 
 impl<'a> RowIterator<'a> {
-    /// Try to extract a complete row from the buffer
-    fn try_extract_row(&mut self) -> Option<Vec<CellValue>> {
-        loop {
-            // Look for <row> start
-            if !self.in_row {
-                if let Some(row_start) = self.buffer.find("<row ") {
-                    self.in_row = true;
-                    // Move from <row onwards to row_content, keep rest in buffer
-                    self.row_content.push_str(&self.buffer[row_start..]);
-                    self.buffer.drain(..);
-                } else {
-                    // No <row found, discard old data but keep some for potential partial tag
-                    if self.buffer.len() > 1024 {
-                        self.buffer.drain(..self.buffer.len() - 100);
-                    }
-                    return None;
-                }
-            }
-
-            // If in row, look for </row> end
-            if self.in_row {
-                // Check row_content first
-                if let Some(row_end_pos) = self.row_content.find("</row>") {
-                    // Found complete row in row_content
-                    let row_end = row_end_pos + 6; // Include "</row>"
-                    let row_xml = self.row_content[..row_end].to_string();
-
-                    // Move remaining data back to buffer for next iteration
-                    if row_end < self.row_content.len() {
-                        self.buffer.insert_str(0, &self.row_content[row_end..]);
-                    }
-
-                    // Clear and reset
-                    self.row_content.clear();
-                    self.in_row = false;
-
-                    // Parse and return
-                    if let Ok(row) = Self::parse_row(&row_xml, self.sst) {
-                        return Some(row);
-                    }
-                    // If parse fails, continue to next row
-                    continue;
-                }
-
-                // Not in row_content, check buffer
-                if !self.buffer.is_empty() {
-                    // Append buffer to row_content
-                    self.row_content.push_str(&self.buffer);
-                    self.buffer.clear();
-                    continue; // Try again
-                }
-
-                // Need more data
-                return None;
-            }
-        }
-    }
-
     fn parse_row(row_xml: &str, sst: &[String]) -> Result<Vec<CellValue>> {
         let mut row_data = Vec::new();
         let mut pos = 0;
