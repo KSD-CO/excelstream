@@ -6,6 +6,7 @@ use super::shared_strings::SharedStrings;
 use super::StreamingZipWriter;
 use crate::error::Result;
 use crate::types::ProtectionOptions;
+use itoa;
 
 /// Workbook that streams XML directly into compressor (no temp files)
 pub struct ZeroTempWorkbook {
@@ -73,7 +74,11 @@ impl ZeroTempWorkbook {
         Ok(())
     }
 
-    pub fn write_row(&mut self, values: &[&str]) -> Result<()> {
+    pub fn write_row<I, S>(&mut self, values: I) -> Result<()>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
         if !self.in_worksheet {
             return Err(crate::error::ExcelError::WriteError(
                 "No worksheet started".to_string(),
@@ -81,33 +86,37 @@ impl ZeroTempWorkbook {
         }
 
         self.current_row += 1;
-        self.max_col = self.max_col.max(values.len() as u32);
 
         // Build row XML in buffer
         self.xml_buffer.clear();
         self.xml_buffer.extend_from_slice(b"<row r=\"");
+
+        let mut num_buffer = itoa::Buffer::new();
         self.xml_buffer
-            .extend_from_slice(self.current_row.to_string().as_bytes());
+            .extend_from_slice(num_buffer.format(self.current_row).as_bytes());
+
         self.xml_buffer.extend_from_slice(b"\">");
 
-        for (col_idx, value) in values.iter().enumerate() {
-            let col_letter = Self::column_letter(col_idx as u32 + 1);
-            self.xml_buffer.extend_from_slice(b"<c r=\"");
-            self.xml_buffer.extend_from_slice(col_letter.as_bytes());
-            self.xml_buffer
-                .extend_from_slice(self.current_row.to_string().as_bytes());
+        let mut col_count = 0;
+        for (col_idx, value) in values.into_iter().enumerate() {
+            col_count += 1;
 
-            if value.is_empty() {
+            self.xml_buffer.extend_from_slice(b"<c r=\"");
+            Self::push_column_letter(&mut self.xml_buffer, col_idx as u32 + 1);
+            self.xml_buffer
+                .extend_from_slice(num_buffer.format(self.current_row).as_bytes());
+
+            let v = value.as_ref();
+            if v.is_empty() {
                 self.xml_buffer.extend_from_slice(b"\"/>");
             } else {
-                // Always treat as string to preserve leading zeros and exact formatting
-                // Users should use write_row_typed() if they want numeric types
                 self.xml_buffer
                     .extend_from_slice(b"\" t=\"inlineStr\"><is><t>");
-                Self::write_escaped(&mut self.xml_buffer, value);
+                Self::write_escaped(&mut self.xml_buffer, v);
                 self.xml_buffer.extend_from_slice(b"</t></is></c>");
             }
         }
+        self.max_col = self.max_col.max(col_count);
 
         self.xml_buffer.extend_from_slice(b"</row>");
 
@@ -134,26 +143,27 @@ impl ZeroTempWorkbook {
         // Build row XML in buffer
         self.xml_buffer.clear();
         self.xml_buffer.extend_from_slice(b"<row r=\"");
+
+        let mut num_buffer = itoa::Buffer::new();
         self.xml_buffer
-            .extend_from_slice(self.current_row.to_string().as_bytes());
+            .extend_from_slice(num_buffer.format(self.current_row).as_bytes());
         self.xml_buffer.extend_from_slice(b"\">");
 
         for (col_idx, styled_cell) in cells.iter().enumerate() {
-            let col_letter = Self::column_letter(col_idx as u32 + 1);
             let value = &styled_cell.value;
             let style_id = styled_cell.style.index();
 
             self.xml_buffer.extend_from_slice(b"<c r=\"");
-            self.xml_buffer.extend_from_slice(col_letter.as_bytes());
+            Self::push_column_letter(&mut self.xml_buffer, col_idx as u32 + 1);
             self.xml_buffer
-                .extend_from_slice(self.current_row.to_string().as_bytes());
+                .extend_from_slice(num_buffer.format(self.current_row).as_bytes());
             self.xml_buffer.extend_from_slice(b"\"");
 
             // Add style attribute if not default
             if style_id > 0 {
                 self.xml_buffer.extend_from_slice(b" s=\"");
                 self.xml_buffer
-                    .extend_from_slice(style_id.to_string().as_bytes());
+                    .extend_from_slice(num_buffer.format(style_id).as_bytes());
                 self.xml_buffer.extend_from_slice(b"\"");
             }
 
@@ -164,12 +174,13 @@ impl ZeroTempWorkbook {
                 }
                 crate::types::CellValue::Int(i) => {
                     self.xml_buffer.extend_from_slice(b" t=\"n\"><v>");
-                    self.xml_buffer.extend_from_slice(i.to_string().as_bytes());
+                    self.xml_buffer
+                        .extend_from_slice(num_buffer.format(*i).as_bytes());
                     self.xml_buffer.extend_from_slice(b"</v></c>");
                 }
                 crate::types::CellValue::Float(f) => {
                     self.xml_buffer.extend_from_slice(b" t=\"n\"><v>");
-                    self.xml_buffer.extend_from_slice(f.to_string().as_bytes());
+                    self.xml_buffer.extend_from_slice(f.to_string().as_bytes()); // Float doesn't use itoa
                     self.xml_buffer.extend_from_slice(b"</v></c>");
                 }
                 crate::types::CellValue::Bool(b) => {
@@ -192,7 +203,7 @@ impl ZeroTempWorkbook {
                 crate::types::CellValue::DateTime(dt) => {
                     // Excel date serial number
                     self.xml_buffer.extend_from_slice(b" t=\"n\"><v>");
-                    self.xml_buffer.extend_from_slice(dt.to_string().as_bytes());
+                    self.xml_buffer.extend_from_slice(dt.to_string().as_bytes()); // Keep as is for now
                     self.xml_buffer.extend_from_slice(b"</v></c>");
                 }
                 crate::types::CellValue::Error(e) => {
@@ -516,15 +527,21 @@ impl ZeroTempWorkbook {
         Ok(())
     }
 
-    fn column_letter(n: u32) -> String {
-        let mut result = String::new();
-        let mut n = n;
+    fn push_column_letter(buffer: &mut Vec<u8>, mut n: u32) {
+        if n == 0 {
+            return;
+        }
+        let mut tmp = [0u8; 10];
+        let mut len = 0;
         while n > 0 {
             let rem = (n - 1) % 26;
-            result.insert(0, (b'A' + rem as u8) as char);
+            tmp[len] = b'A' + rem as u8;
+            len += 1;
             n = (n - 1) / 26;
         }
-        result
+        for i in (0..len).rev() {
+            buffer.push(tmp[i]);
+        }
     }
 
     fn write_escaped(buffer: &mut Vec<u8>, s: &str) {

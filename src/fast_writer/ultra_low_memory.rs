@@ -35,7 +35,11 @@ impl UltraLowMemoryWorkbook {
         self.inner.add_worksheet(name)
     }
 
-    pub fn write_row(&mut self, values: &[&str]) -> Result<()> {
+    pub fn write_row<I, S>(&mut self, values: I) -> Result<()>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
         self.inner.write_row(values)
     }
 

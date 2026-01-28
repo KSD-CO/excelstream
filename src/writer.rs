@@ -143,9 +143,7 @@ impl ExcelWriter {
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let values: Vec<String> = data.into_iter().map(|s| s.as_ref().to_string()).collect();
-        let refs: Vec<&str> = values.iter().map(|s| s.as_str()).collect();
-        self.inner.write_row(&refs)?;
+        self.inner.write_row(data)?;
         self.current_row += 1;
         Ok(())
     }
