@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0] - 2026-01-29
+
+### 🚀 Writer Performance Optimizations
+
+**Major Performance Improvements** - 3-8% faster Excel writing with fewer memory allocations!
+
+### Changed
+- **Eliminated Double Allocation** (`src/writer.rs`)
+  - Removed unnecessary `Vec<String>` intermediate buffer in `write_row()`
+  - Changed from `map().collect()` to direct iterator pass-through
+  - **Impact:** 2 fewer allocations per row
+
+- **Fast Integer Formatting** (`src/fast_writer/zero_temp_workbook.rs`)
+  - Integrated `itoa` crate for integer-to-string conversion
+  - Replaced `.to_string()` with `itoa::Buffer::format()`
+  - **Impact:** 2-3x faster integer formatting with zero heap allocations
+
+- **Optimized Column Letter Generation** (`src/fast_writer/zero_temp_workbook.rs`)
+  - Rewrote `push_column_letter()` to write directly to output buffer
+  - Eliminated intermediate String allocation
+  - **Impact:** Zero temp allocations for column addressing (A, B, AA, etc.)
+
+### Added
+- **Dependency:** `itoa = "1.0"` - Fast integer formatting library
+- **Optional Dependency:** `dhat = { version = "0.3.3", optional = true }` - Heap profiling
+- **Feature:** `dhat-heap` - Enable dhat heap profiling for benchmarking
+- **Example:** `examples/memory_bench.rs` - Memory profiling example
+
+### Performance
+- **10 columns × 1M rows:** +6.1% faster (29,455 → 31,263 rows/sec)
+- **20 columns × 1M rows:** +8.5% faster (17,367 → 18,842 rows/sec)
+- **Memory usage:** Virtually identical (+0.4% RSS, fewer heap allocations)
+- **File format:** 100% compatible, identical file sizes
+
+### Verified
+- ✅ 50/50 unit tests passing
+- ✅ Cargo clippy clean
+- ✅ All examples working
+- ✅ 39 million cells verified for data integrity
+- ✅ Comprehensive benchmark testing with criterion
+
+### Documentation
+- Added `PERFORMANCE_VERIFICATION_PR7.md` - Detailed benchmark results
+- Added `MILLION_ROW_PERFORMANCE_PR7.md` - 1M row performance analysis
+- Added `MEMORY_ANALYSIS_CLARIFICATION.md` - Memory usage deep dive
+- Added `FILE_INTEGRITY_REPORT_PR7.md` - Data integrity verification
+- Added `PR7_FINAL_RECOMMENDATION.md` - Complete PR review
+
+**See:** [Performance Report](MILLION_ROW_PERFORMANCE_PR7.md) | [PR #7 Review](PR7_FINAL_RECOMMENDATION.md)
+
 ## [0.19.0] - 2026-01-28
 
 ### 🚀 Performance & Code Quality Improvements

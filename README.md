@@ -16,7 +16,39 @@
 - 🗜️ **Parquet Conversion** - Stream Excel ↔ Parquet with constant memory
 - 🐳 **Production Ready** - Works in 256 MB containers
 
-## 🔥 What's New in v0.19.0
+## 🔥 What's New in v0.20.0
+
+**Writer Performance Optimizations** - 3-8% faster with fewer memory allocations!
+
+- 🚀 **Eliminated Double Allocation** - Removed unnecessary `Vec<String>` buffer in `write_row()`
+- ⚡ **Fast Integer Formatting** - Using `itoa` crate for 2-3x faster integer-to-string conversion
+- 📝 **Optimized Column Letters** - Direct buffer writing for column addressing (A, B, AA, etc.)
+- 💾 **Fewer Heap Allocations** - Zero temp strings during cell writing
+- 🎯 **Scales with Width** - Wider tables (20+ columns) see larger improvements (up to 8.5%)
+
+**Performance Gains (Verified with 1M rows):**
+- 10 columns: **+6.1% faster** (29,455 → 31,263 rows/sec)
+- 20 columns: **+8.5% faster** (17,367 → 18,842 rows/sec)
+- Memory usage: Virtually identical (+0.4%)
+
+```rust
+// Same API, now faster!
+let mut writer = ExcelWriter::new("output.xlsx")?;
+writer.write_row(["ID", "Name", "Email"])?;
+
+for i in 1..=1_000_000 {
+    writer.write_row([
+        &i.to_string(),
+        &format!("User_{}", i),
+        &format!("user{}@test.com", i),
+    ])?;  // Now 3-8% faster with fewer allocations
+}
+writer.save()?;
+```
+
+**See:** [Performance Report](MILLION_ROW_PERFORMANCE_PR7.md) | [PR #7 Details](PR7_FINAL_RECOMMENDATION.md)
+
+### Previous Release: v0.19.0
 
 **Performance & Memory Optimizations** - Enhanced streaming reader and CSV parser!
 
