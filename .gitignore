@@ -1,4 +1,4 @@
-/target
+**/target
 /Cargo.lock
 **/*.rs.bk
 *.pdb
@@ -38,3 +38,5 @@ benches/results/
 examples/*.csv
 examples/*.zst
 examples/*.gz
+
+**/pkg/

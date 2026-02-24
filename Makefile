@@ -1,5 +1,7 @@
 .PHONY: help check fmt fmt-check clippy test build build-release clean all ci
 
+.PHONY: wasm-build wasm-pack-publish wasm-serve
+
 # Default target
 help:
 	@echo "Available targets:"
@@ -98,6 +100,23 @@ doc:
 doc-open:
 	@echo "📚 Opening documentation..."
 	@cargo doc --all-features --no-deps --open
+
+# Build wasm adapter for web (wasm-pack)
+wasm-build:
+	@echo "🔨 Building wasm_adapter package..."
+	@cd wasm_adapter && wasm-pack build --target web --release
+	@echo "🔨 Copying pkg into demo folder..."
+	@cd wasm_adapter && rm -rf wasm_demo/pkg || true && cp -r pkg wasm_demo/pkg || true
+
+# Publish wasm pkg to npm (local, requires NPM_TOKEN env or npm login)
+wasm-pack-publish:
+	@echo "📦 Packing and publishing wasm_adapter/pkg to npm (requires NODE_AUTH_TOKEN/NPM_TOKEN)"
+	@cd wasm_adapter/pkg && echo "About to publish pkg in $$PWD" && npm publish --access public
+
+# Serve wasm demo (serve wasm_adapter root so ../pkg resolves)
+wasm-serve:
+	@echo "🌐 Serving wasm_adapter/ on :8080"
+	@cd wasm_adapter && python -m http.server 8080
 
 # Update dependencies
 update:

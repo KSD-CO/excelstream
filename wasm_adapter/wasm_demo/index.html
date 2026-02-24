@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>excelstream-wasm demo</title>
+  </head>
+  <body>
+    <h1>excelstream-wasm CSV demo</h1>
+    <input id="file" type="file" />
+    <pre id="out"></pre>
+
+    <script type="module">
+      import init, { init_parser, register_callback, feed_line, parse_csv_full, load_shared_strings, parse_sheet_xml } from '../pkg/excelstream_wasm.js';
+      import { unzipSync } from './vendor/fflate.mjs';
+
+      const out = document.getElementById('out');
+
+      async function run() {
+        await init();
+        init_parser(44, 34); // comma, quote
+        register_callback((row) => {
+          out.textContent += JSON.stringify(row) + '\n';
+        });
+
+        const input = document.getElementById('file');
+        input.onchange = async (e) => {
+          out.textContent = '';
+          const file = e.target.files[0];
+          if (!file) return;
+          const name = file.name.toLowerCase();
+          if (name.endsWith('.csv') || name.endsWith('.csv.zst') || name.endsWith('.csv.gz')) {
+            const text = await file.text();
+            const rows = parse_csv_full(text);
+            out.textContent = JSON.stringify(rows, null, 2);
+            return;
+          }
+
+          if (name.endsWith('.xlsx')) {
+            // Read as arrayBuffer and unzip in JS, then feed sharedStrings + sheet xml to wasm
+            const ab = await file.arrayBuffer();
+            const files = unzipSync(new Uint8Array(ab));
+            // find sharedStrings and first worksheet
+            const keys = Object.keys(files || {});
+            console.log('ZIP entries:', keys);
+            // try exact match for sharedStrings
+            const sharedKey = keys.find(k => k.endsWith('xl/sharedStrings.xml') || k.endsWith('xl\\sharedStrings.xml'));
+            // flexible worksheet match: handle forward/back slashes and nested paths
+            const sheetKey = keys.find(k => /xl[\/]+worksheets[\/]+.*\.xml$/i.test(k));
+            const decoder = new TextDecoder();
+            if (sharedKey) {
+              const s = decoder.decode(files[sharedKey]);
+              load_shared_strings(s);
+            }
+            if (sheetKey) {
+              const s = decoder.decode(files[sheetKey]);
+              const rows = parse_sheet_xml(s);
+              out.textContent = JSON.stringify(rows, null, 2);
+              return;
+            }
+            // helpful debug: show available keys to the user
+            out.textContent = 'No worksheet XML found in XLSX. ZIP entries:\n' + keys.join('\n');
+            return;
+          }
+
+          out.textContent = 'Unsupported file type. Try .csv or .xlsx';
+        };
+      }
+
+      run();
+    </script>
+  </body>
+ </html>

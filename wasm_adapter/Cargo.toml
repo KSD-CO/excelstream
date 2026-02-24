@@ -1,0 +1,25 @@
+[package]
+name = "excelstream_wasm"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ton That Vu <ttvuhm@gmail.com>"]
+description = "WASM adapter for excelstream (CSV parsing) - demo package for npm"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde-wasm-bindgen = "0.5"
+js-sys = "0.3"
+
+# Depend on the workspace crate (excelstream) via path.
+# We only require the CSV parser for the wasm adapter; enable the minimal feature set
+# by using `default-features = false` and explicitly enabling granular features if needed.
+# No workspace dependency to keep the wasm adapter minimal and avoid native deps.
+
+
+[profile.release]
+lto = true
