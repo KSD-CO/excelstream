@@ -3,6 +3,7 @@ name: Build & Publish WASM to npm
 on:
   push:
     tags: ['v*.*.*']
+  workflow_dispatch:
 
 jobs:
   build-and-publish:
