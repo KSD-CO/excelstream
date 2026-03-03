@@ -1,6 +1,6 @@
 [package]
 name = "excelstream_wasm"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Ton That Vu <ttvuhm@gmail.com>"]
 description = "WASM adapter for excelstream (CSV parsing) - demo package for npm"
