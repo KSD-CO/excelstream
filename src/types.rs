@@ -33,6 +33,8 @@ pub enum CellStyle {
     HighlightRed = 12,
     /// Thin borders on all sides
     BorderThin = 13,
+    /// DateTime format without seconds (MM/DD/YYYY HH:MM)
+    DateTimeShort = 14,
 }
 
 impl CellStyle {
