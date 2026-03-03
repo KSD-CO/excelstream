@@ -16,7 +16,29 @@
 - 🗜️ **Parquet Conversion** - Stream Excel ↔ Parquet with constant memory
 - 🐳 **Production Ready** - Works in 256 MB containers
 
-## 🔥 What's New in v0.20.0
+## 🔥 What's New in v0.20.1
+
+**Cell Formatting Improvements** - New `DateTimeShort` style and S3 writer styling fix!
+
+- 📅 **New `DateTimeShort` style** - Format dates as `MM/DD/YYYY HH:MM` (without seconds)
+- 🔧 **Fixed DateTime formatting** - Date styles now use explicit custom format codes instead of locale-dependent built-in IDs
+- ☁️ **S3 writer full styling** - `S3ExcelWriter` now supports all 15 cell styles (was only Default + Bold)
+- 🌐 **`write_row_styled` public** - `S3ExcelWriter::write_row_styled()` is now a public method
+
+```rust
+use excelstream::{ExcelWriter, CellValue, CellStyle};
+
+let mut writer = ExcelWriter::new("output.xlsx")?;
+
+writer.write_row_styled(&[
+    (CellValue::Float(44927.5), CellStyle::DateTimeShort),   // 01/01/2023 12:00
+    (CellValue::Float(44927.0), CellStyle::DateDefault),     // 01/01/2023
+    (CellValue::Float(44927.5), CellStyle::DateTimestamp),   // 01/01/2023 12:00:00
+])?;
+writer.save()?;
+```
+
+### Previous Release: v0.20.0
 
 **Writer Performance Optimizations** - 3-8% faster with fewer memory allocations!
 
@@ -25,26 +47,6 @@
 - 📝 **Optimized Column Letters** - Direct buffer writing for column addressing (A, B, AA, etc.)
 - 💾 **Fewer Heap Allocations** - Zero temp strings during cell writing
 - 🎯 **Scales with Width** - Wider tables (20+ columns) see larger improvements (up to 8.5%)
-
-**Performance Gains (Verified with 1M rows):**
-- 10 columns: **+6.1% faster** (29,455 → 31,263 rows/sec)
-- 20 columns: **+8.5% faster** (17,367 → 18,842 rows/sec)
-- Memory usage: Virtually identical (+0.4%)
-
-```rust
-// Same API, now faster!
-let mut writer = ExcelWriter::new("output.xlsx")?;
-writer.write_row(["ID", "Name", "Email"])?;
-
-for i in 1..=1_000_000 {
-    writer.write_row([
-        &i.to_string(),
-        &format!("User_{}", i),
-        &format!("user{}@test.com", i),
-    ])?;  // Now 3-8% faster with fewer allocations
-}
-writer.save()?;
-```
 
 **See:** [Performance Report](MILLION_ROW_PERFORMANCE_PR7.md) | [PR #7 Details](PR7_FINAL_RECOMMENDATION.md)
 
@@ -119,12 +121,12 @@ println!("Transferred: {} bytes at {:.2} MB/s", stats.bytes_transferred, stats.s
 
 ```toml
 [dependencies]
-excelstream = "0.18"
+excelstream = "0.20"
 
 # Optional features
-excelstream = { version = "0.18", features = ["cloud-s3"] }        # S3 support
-excelstream = { version = "0.18", features = ["cloud-gcs"] }       # GCS support
-excelstream = { version = "0.18", features = ["parquet-support"] } # Parquet conversion
+excelstream = { version = "0.20", features = ["cloud-s3"] }        # S3 support
+excelstream = { version = "0.20", features = ["cloud-gcs"] }       # GCS support
+excelstream = { version = "0.20", features = ["parquet-support"] } # Parquet conversion
 ```
 
 ### Write Excel (Local)
