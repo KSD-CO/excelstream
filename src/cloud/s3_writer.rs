@@ -250,7 +250,7 @@ impl S3ExcelWriter {
     }
 
     /// Write a row with styled cells
-    async fn write_row_styled(&mut self, cells: &[crate::types::StyledCell]) -> Result<()> {
+    pub async fn write_row_styled(&mut self, cells: &[crate::types::StyledCell]) -> Result<()> {
         self.ensure_worksheet().await?;
 
         self.current_row += 1;
@@ -499,15 +499,43 @@ impl S3ExcelWriter {
 
         let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<fonts count="2">
+<numFmts count="3">
+<numFmt numFmtId="164" formatCode="mm/dd/yyyy"/>
+<numFmt numFmtId="165" formatCode="mm/dd/yyyy hh:mm:ss"/>
+<numFmt numFmtId="166" formatCode="mm/dd/yyyy hh:mm"/>
+</numFmts>
+<fonts count="3">
 <font><sz val="11"/><name val="Calibri"/></font>
 <font><b/><sz val="11"/><name val="Calibri"/></font>
+<font><i/><sz val="11"/><name val="Calibri"/></font>
 </fonts>
-<fills count="1"><fill><patternFill patternType="none"/></fill></fills>
-<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
-<cellXfs count="2">
-<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
-<xf numFmtId="0" fontId="1" fillId="0" borderId="0" applyFont="1"/>
+<fills count="5">
+<fill><patternFill patternType="none"/></fill>
+<fill><patternFill patternType="gray125"/></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FF00FF00"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFFF0000"/></patternFill></fill>
+</fills>
+<borders count="2">
+<border><left/><right/><top/><bottom/><diagonal/></border>
+<border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/></border>
+</borders>
+<cellXfs count="15">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+<xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+<xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+<xf numFmtId="5" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+<xf numFmtId="9" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+<xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0" applyFill="1"/>
+<xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/>
+<xf numFmtId="0" fontId="0" fillId="4" borderId="0" xfId="0" applyFill="1"/>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
+<xf numFmtId="166" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
 </cellXfs>
 </styleSheet>"#;
 

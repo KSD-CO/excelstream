@@ -201,9 +201,8 @@ impl ZeroTempWorkbook {
                     self.xml_buffer.extend_from_slice(b"</f></c>");
                 }
                 crate::types::CellValue::DateTime(dt) => {
-                    // Excel date serial number
                     self.xml_buffer.extend_from_slice(b" t=\"n\"><v>");
-                    self.xml_buffer.extend_from_slice(dt.to_string().as_bytes()); // Keep as is for now
+                    self.xml_buffer.extend_from_slice(dt.to_string().as_bytes());
                     self.xml_buffer.extend_from_slice(b"</v></c>");
                 }
                 crate::types::CellValue::Error(e) => {
@@ -439,7 +438,11 @@ impl ZeroTempWorkbook {
             .start_entry("xl/styles.xml")?;
         let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<numFmts count="0"/>
+<numFmts count="3">
+<numFmt numFmtId="164" formatCode="mm/dd/yyyy"/>
+<numFmt numFmtId="165" formatCode="mm/dd/yyyy hh:mm:ss"/>
+<numFmt numFmtId="166" formatCode="mm/dd/yyyy hh:mm"/>
+</numFmts>
 <fonts count="3">
 <font><sz val="11"/><name val="Calibri"/></font>
 <font><b/><sz val="11"/><name val="Calibri"/></font>
@@ -456,21 +459,22 @@ impl ZeroTempWorkbook {
 <border><left/><right/><top/><bottom/><diagonal/></border>
 <border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/></border>
 </borders>
-<cellXfs count="14">
+<cellXfs count="15">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
 <xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
 <xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
 <xf numFmtId="5" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
 <xf numFmtId="9" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
-<xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
-<xf numFmtId="22" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
 <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
 <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
 <xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0" applyFill="1"/>
 <xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/>
 <xf numFmtId="0" fontId="0" fillId="4" borderId="0" xfId="0" applyFill="1"/>
 <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
+<xf numFmtId="166" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
 </cellXfs>
 </styleSheet>"#;
         self.zip_writer

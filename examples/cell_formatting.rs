@@ -215,6 +215,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     ])?;
 
+    // 15. Date Time Short (MM/DD/YYYY HH:MM)
+    writer.write_row_styled(&[
+        (
+            CellValue::String("DateTimeShort".to_string()),
+            CellStyle::Default,
+        ),
+        (
+            CellValue::Float(44927.5), // Excel datetime serial
+            CellStyle::DateTimeShort,
+        ),
+        (
+            CellValue::String("DateTime without seconds".to_string()),
+            CellStyle::Default,
+        ),
+    ])?;
+
     // Demonstrate write_row_with_style() - all cells with same style
     writer.write_row(["", "", ""])?; // Empty row
     writer.write_header_bold(["Convenience Method Demo"])?;
@@ -257,7 +273,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     writer.save()?;
 
     println!("✅ Successfully created output_formatted.xlsx");
-    println!("   Open the file in Excel to see all 14 cell styles!");
+    println!("   Open the file in Excel to see all 15 cell styles!");
     println!();
     println!("Available styles:");
     println!("  - Default: No formatting");
@@ -274,6 +290,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - HighlightGreen: Green background");
     println!("  - HighlightRed: Red background");
     println!("  - BorderThin: Thin borders");
+    println!("  - DateTimeShort: MM/DD/YYYY HH:MM");
 
     Ok(())
 }
