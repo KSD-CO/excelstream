@@ -360,6 +360,29 @@ fn decode_xml_entities(text: &str) -> String {
         .replace("&apos;", "'")
 }
 
+fn parse_shared_string_item(si_block: &str) -> String {
+    let mut text = String::new();
+    let mut pos = 0;
+
+    while let Some(t_start) = si_block[pos..].find("<t") {
+        let t_start = pos + t_start;
+        let Some(t_open_end) = si_block[t_start..].find('>') else {
+            break;
+        };
+        let value_start = t_start + t_open_end + 1;
+
+        let Some(t_close) = si_block[value_start..].find("</t>") else {
+            break;
+        };
+        let value_end = value_start + t_close;
+
+        text.push_str(&decode_xml_entities(&si_block[value_start..value_end]));
+        pos = value_end + 4;
+    }
+
+    text
+}
+
 impl StreamingReader {
     /// Load Shared Strings Table
     ///
@@ -376,21 +399,12 @@ impl StreamingReader {
 
         // Parse all <si> tags (multiple per line in compact XML)
         let mut pos = 0;
-        while let Some(si_start) = xml_data[pos..].find("<si>") {
+        while let Some(si_start) = xml_data[pos..].find("<si") {
             let si_start = pos + si_start;
             if let Some(si_end) = xml_data[si_start..].find("</si>") {
                 let si_end = si_start + si_end + 5; // Include "</si>"
                 let si_block = &xml_data[si_start..si_end];
-
-                // Extract text from <t>text</t>
-                if let Some(t_start) = si_block.find("<t>") {
-                    if let Some(t_end) = si_block.find("</t>") {
-                        let text = &si_block[t_start + 3..t_end];
-                        // Decode XML entities in SST
-                        let decoded = decode_xml_entities(text);
-                        sst.push(decoded);
-                    }
-                }
+                sst.push(parse_shared_string_item(si_block));
 
                 pos = si_end;
             } else {
@@ -754,6 +768,50 @@ mod tests {
         let sst = vec!["hello".to_string(), "world".to_string()];
         let size = StreamingReader::estimate_sst_size(&sst);
         assert!(size > 10); // At least the string bytes
+    }
+
+    #[test]
+    fn test_parse_shared_string_text_with_attributes() {
+        let xml = r#"<si><t xml:space="preserve">ID бизнес-аккаунта</t></si>"#;
+
+        assert_eq!(parse_shared_string_item(xml), "ID бизнес-аккаунта");
+    }
+
+    #[test]
+    fn test_parse_shared_string_rich_text_runs() {
+        let xml = r#"<si><r><t>ID </t></r><r><t>бизнес-аккаунта</t></r></si>"#;
+
+        assert_eq!(parse_shared_string_item(xml), "ID бизнес-аккаунта");
+    }
+
+    #[test]
+    fn test_parse_shared_string_preserves_empty_items() {
+        let xml = r#"<si></si>"#;
+
+        assert_eq!(parse_shared_string_item(xml), "");
+    }
+
+    #[test]
+    fn test_parse_shared_string_xml_entities() {
+        let xml = r#"<si><t>A&amp;B &lt;tag&gt; &quot;quoted&quot; &apos;single&apos;</t></si>"#;
+
+        assert_eq!(
+            parse_shared_string_item(xml),
+            "A&B <tag> \"quoted\" 'single'"
+        );
+    }
+
+    #[test]
+    fn test_parse_row_resolves_shared_string() {
+        let sst = vec!["ID бизнес-аккаунта".to_string()];
+        let row_xml = r#"<row r="1"><c r="A1" t="s"><v>0</v></c></row>"#;
+
+        let row = RowIterator::parse_row(row_xml, &sst).unwrap();
+
+        assert_eq!(
+            row,
+            vec![CellValue::String("ID бизнес-аккаунта".to_string())]
+        );
     }
 
     #[test]
