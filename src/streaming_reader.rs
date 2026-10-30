@@ -185,7 +185,7 @@ impl StreamingReader {
         // Load Shared Strings Table (can't avoid this)
         let sst = Self::load_shared_strings(&mut archive)?;
 
-        println!(
+        log::debug!(
             "📊 Loaded {} shared strings (~{:.2} MB in memory)",
             sst.len(),
             Self::estimate_sst_size(&sst) as f64 / (1024.0 * 1024.0)
@@ -194,7 +194,7 @@ impl StreamingReader {
         // Load sheet names and paths from workbook.xml
         let (sheet_names, sheet_paths) = Self::load_sheet_info(&mut archive)?;
 
-        println!("📋 Found {} sheets: {:?}", sheet_names.len(), sheet_names);
+        log::debug!("📋 Found {} sheets: {:?}", sheet_names.len(), sheet_names);
 
         Ok(StreamingReader {
             archive,
